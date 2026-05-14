@@ -1,0 +1,29 @@
+#!/bin/sh
+
+# Minimal DHCP hook for BusyBox udhcpc.
+# udhcpc exports variables such as interface, ip, subnet, router, and dns.
+
+case "$1" in
+    bound|renew)
+        ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}" up
+
+        if [ -n "${router:-}" ]; then
+            route del default dev "$interface" 2>/dev/null || true
+            for gateway in $router; do
+                route add default gw "$gateway" dev "$interface" 2>/dev/null || true
+                break
+            done
+        fi
+
+        : > /etc/resolv.conf
+        for server in ${dns:-10.0.2.3}; do
+            echo "nameserver $server" >> /etc/resolv.conf
+        done
+        ;;
+
+    deconfig)
+        ifconfig "$interface" 0.0.0.0 2>/dev/null || true
+        ;;
+esac
+
+exit 0
