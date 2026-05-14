@@ -10,7 +10,7 @@ need() {
     fi
 }
 
-for tool in curl tar make gcc ld bc bison flex cpio gzip xz bzip2 qemu-system-x86_64 timeout sort yes; do
+for tool in curl tar make gcc ld bc bison flex cpio gzip xz bzip2 qemu-system-x86_64 timeout sort yes truncate mke2fs; do
     need "$tool"
 done
 
@@ -21,8 +21,8 @@ fi
 if [ "$missing" -ne 0 ]; then
     echo
     echo "Use the Docker builder for a known-good environment:"
-    echo "  docker build -t aws-sysops-linux-builder ."
-    echo "  docker run --rm -it -v \"\${PWD}:/work\" aws-sysops-linux-builder make run"
+    echo "  docker build -t amazonspiceox-builder ."
+    echo "  docker run --rm -it -v \"\${PWD}:/work\" amazonspiceox-builder make run"
     exit 1
 fi
 

@@ -48,6 +48,10 @@ if [ -f "$rootfs_dir/usr/share/udhcpc/default.script" ]; then
     chmod 0755 "$rootfs_dir/usr/share/udhcpc/default.script"
 fi
 
+if [ -f "$rootfs_dir/sbin/init" ]; then
+    chmod 0755 "$rootfs_dir/sbin/init"
+fi
+
 chmod 0700 "$rootfs_dir/root"
 chmod 1777 "$rootfs_dir/tmp"
 : > "$rootfs_dir/var/log/boot.log"

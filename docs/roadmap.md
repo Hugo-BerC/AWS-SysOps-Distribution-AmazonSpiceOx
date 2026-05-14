@@ -1,6 +1,6 @@
 # Roadmap
 
-Mentat Linux advances in small milestones. Each phase should remain bootable,
+AmazonSpiceOx advances in small milestones. Each phase should remain bootable,
 documented, and reproducible.
 
 ## Phase I - Minimal Boot
@@ -37,8 +37,8 @@ Implemented:
 Done when QEMU prints:
 
 ```text
-MENTAT_LINUX_PHASE2_BOOT_OK
-mentat:/#
+AMAZONSPICEOX_PHASE2_BOOT_OK
+arrakis:/#
 ```
 
 ## Phase III - Persistent Root Block Device
@@ -46,12 +46,21 @@ mentat:/#
 Goal: move from "complete initramfs" to a root filesystem image mounted as
 the real `/`.
 
-Planned:
+Implemented:
 
 - ext4 root image.
 - QEMU `-drive`.
-- initramfs that mounts the block root and `switch_root`s.
+- initramfs stage 1 that mounts the block root and runs `switch_root`.
+- stage 2 `/sbin/init` inside the persistent rootfs.
 - basic `/etc/fstab`.
+- persistent marker under `/var/lib/amazonspiceox/rootfs-state`.
+
+Done when QEMU prints:
+
+```text
+AMAZONSPICEOX_PHASE3_BOOT_OK
+arrakis:/#
+```
 
 ## Phase IV - Toolchain
 
@@ -71,7 +80,7 @@ Goal: install packages through a tiny native interface.
 Example:
 
 ```sh
-mentat install htop
+amazonspiceox install htop
 ```
 
 ## Phase VI - AWS Flavor
