@@ -1,0 +1,4 @@
+Mentat Linux Phase II
+
+This userspace is intentionally small: BusyBox, initramfs, virtual filesystems,
+and enough networking to learn how early Linux initialization works.

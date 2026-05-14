@@ -1,0 +1,114 @@
+#!/bin/sh
+
+# Mentat Linux early userspace.
+# This script is PID 1. If PID 1 exits, the kernel panics, so every fatal
+# path drops to an emergency shell or sleeps forever instead of exiting.
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PS1='mentat:\w# '
+export HOME=/root
+export TERM=linux
+export ENV=/etc/profile
+
+HOSTNAME_FILE=/etc/hostname
+BOOT_LOG=/var/log/boot.log
+
+log() {
+    message="[init] $*"
+    echo "$message"
+    echo "$message" >> "$BOOT_LOG" 2>/dev/null || true
+}
+
+emergency_shell() {
+    log "entering emergency shell"
+    log "type 'exit' to return to the init recovery loop"
+
+    while true; do
+        setsid cttyhack sh
+        log "emergency shell exited; restarting in 2 seconds"
+        sleep 2
+    done
+}
+
+fail() {
+    log "ERROR: $*"
+    emergency_shell
+}
+
+mount_once() {
+    target="$2"
+
+    if grep -qs " $target " /proc/mounts 2>/dev/null; then
+        log "$target already mounted"
+        return 0
+    fi
+
+    mount -t "$1" "$1" "$target" || fail "could not mount $target"
+    log "mounted $target"
+}
+
+setup_devices() {
+    mkdir -p /dev
+    mount_once devtmpfs /dev
+
+    [ -c /dev/console ] || mknod -m 600 /dev/console c 5 1 2>/dev/null || true
+    [ -c /dev/null ] || mknod -m 666 /dev/null c 1 3 2>/dev/null || true
+}
+
+setup_runtime_dirs() {
+    mkdir -p /proc /sys /dev /run /tmp /var/log /root
+    chmod 1777 /tmp
+    : > "$BOOT_LOG" 2>/dev/null || true
+}
+
+setup_hostname() {
+    name="mentat"
+
+    if [ -f "$HOSTNAME_FILE" ]; then
+        name="$(cat "$HOSTNAME_FILE")"
+    fi
+
+    hostname "$name" || fail "could not set hostname"
+    log "hostname set to $name"
+}
+
+setup_network() {
+    log "initializing loopback"
+    ip link set lo up 2>/dev/null || ifconfig lo 127.0.0.1 up 2>/dev/null || true
+
+    if ip link set eth0 up 2>/dev/null || ifconfig eth0 up 2>/dev/null; then
+        log "eth0 link is up"
+
+        if command -v udhcpc >/dev/null 2>&1; then
+            udhcpc -i eth0 -q -n -t 3 -T 2 >/tmp/udhcpc.log 2>&1 \
+                && log "dhcp lease acquired on eth0" \
+                || log "dhcp did not complete; see /tmp/udhcpc.log"
+        fi
+    else
+        log "eth0 not available yet"
+    fi
+}
+
+start_shell() {
+    log "Mentat Linux Phase II boot complete"
+    echo
+    echo "Mentat Linux - Phase II"
+    echo "MENTAT_LINUX_PHASE2_BOOT_OK"
+    echo "Kernel: $(uname -r)"
+    echo
+
+    while true; do
+        setsid cttyhack sh
+        log "interactive shell exited; restarting in 2 seconds"
+        sleep 2
+    done
+}
+
+setup_runtime_dirs
+log "starting early userspace"
+mount_once proc /proc
+mount_once sysfs /sys
+setup_devices
+setup_hostname
+setup_network
+start_shell

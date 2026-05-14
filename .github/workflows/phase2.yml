@@ -1,0 +1,41 @@
+name: phase-ii
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc \
+            bison \
+            build-essential \
+            bzip2 \
+            cpio \
+            curl \
+            flex \
+            gzip \
+            libelf-dev \
+            libssl-dev \
+            make \
+            musl-tools \
+            qemu-system-x86 \
+            xz-utils
+
+      - name: Check tools
+        run: make deps
+
+      - name: Build
+        run: make all
+
+      - name: Phase II boot smoke test
+        run: make smoke
