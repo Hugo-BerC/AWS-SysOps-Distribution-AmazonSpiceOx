@@ -12,6 +12,7 @@ ROOTFS_DIR := $(BUILD_DIR)/rootfs
 OUT_DIR := out
 ROOTFS_TEMPLATE := rootfs
 INIT_FILE := initramfs/init
+KERNEL_HEADERS_DIR := $(BUILD_DIR)/kernel-headers
 
 LINUX_TARBALL := linux-$(LINUX_VERSION).tar.xz
 BUSYBOX_TARBALL := busybox-$(BUSYBOX_VERSION).tar.bz2
@@ -27,7 +28,9 @@ INITRAMFS := $(OUT_DIR)/rootfs.cpio.gz
 BZIMAGE := $(KERNEL_SRC)/arch/x86/boot/bzImage
 
 JOBS ?= $(shell nproc 2>/dev/null || echo 2)
-BUSYBOX_CC ?= $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-gcc || echo gcc)
+DETECTED_BUSYBOX_CC := $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-gcc || echo gcc)
+BUSYBOX_CC ?= $(DETECTED_BUSYBOX_CC)
+BUSYBOX_CC := $(if $(strip $(BUSYBOX_CC)),$(BUSYBOX_CC),$(DETECTED_BUSYBOX_CC))
 QEMU_MEMORY ?= 512M
 QEMU_APPEND ?= console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init
 SMOKE_TIMEOUT ?= 30s
@@ -81,6 +84,13 @@ $(BZIMAGE): $(KERNEL_SRC)/.config
 $(KERNEL_IMAGE): $(BZIMAGE) | $(OUT_DIR)
 	cp $< $@
 
+.PHONY: kernel-headers
+kernel-headers: $(KERNEL_HEADERS_DIR)/include/linux/types.h
+
+$(KERNEL_HEADERS_DIR)/include/linux/types.h: $(KERNEL_SRC)/.config
+	rm -rf $(KERNEL_HEADERS_DIR)
+	$(MAKE) -C $(KERNEL_SRC) ARCH=$(KERNEL_ARCH) INSTALL_HDR_PATH="$(abspath $(KERNEL_HEADERS_DIR))" headers_install
+
 $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile
 	$(MAKE) -C $(BUSYBOX_SRC) allnoconfig
 	sh scripts/kconfig-set.sh $(BUSYBOX_SRC)/.config \
@@ -129,8 +139,8 @@ $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile
 	yes "" | $(MAKE) -C $(BUSYBOX_SRC) oldconfig
 
 .PHONY: rootfs
-rootfs: $(BUSYBOX_SRC)/.config $(INIT_FILE) scripts/build-rootfs.sh
-	sh scripts/build-rootfs.sh "$(BUSYBOX_SRC)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(BUSYBOX_CC)" "$(JOBS)"
+rootfs: $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) scripts/build-rootfs.sh
+	sh scripts/build-rootfs.sh "$(BUSYBOX_SRC)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(BUSYBOX_CC)" "$(JOBS)" "$(abspath $(KERNEL_HEADERS_DIR))"
 
 .PHONY: initramfs
 initramfs: $(INITRAMFS)

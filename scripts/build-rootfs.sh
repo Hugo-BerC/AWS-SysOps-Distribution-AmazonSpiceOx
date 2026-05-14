@@ -7,6 +7,7 @@ init_file="${3:?init file required}"
 rootfs_dir="${4:?output rootfs directory required}"
 busybox_cc="${5:-gcc}"
 jobs="${6:-1}"
+kernel_headers_dir="${7:-}"
 
 echo "Building rootfs at $rootfs_dir"
 
@@ -33,7 +34,12 @@ mkdir -p \
     "$rootfs_dir/root" \
     "$rootfs_dir/run"
 
-make -C "$busybox_src" -j"$jobs" CC="$busybox_cc"
+extra_cflags=""
+if [ -n "$kernel_headers_dir" ]; then
+    extra_cflags="-I$kernel_headers_dir/include"
+fi
+
+make -C "$busybox_src" -j"$jobs" CC="$busybox_cc" EXTRA_CFLAGS="$extra_cflags"
 make -C "$busybox_src" CONFIG_PREFIX="$rootfs_dir" install
 
 install -m 0755 "$init_file" "$rootfs_dir/init"
