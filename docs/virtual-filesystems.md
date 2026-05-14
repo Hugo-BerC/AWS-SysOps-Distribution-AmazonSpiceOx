@@ -25,5 +25,5 @@ Mounted at `/dev`.
 TTYs, disks, and network-related devices. Without a useful `/dev`, interactive
 userspace is fragile because basic character devices may be missing.
 
-Mentat Linux mounts these from `initramfs/init` because there is no systemd or
+AmazonSpiceOx mounts these from `initramfs/init` because there is no systemd or
 full init system yet.

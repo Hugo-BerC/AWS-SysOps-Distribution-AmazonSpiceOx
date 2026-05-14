@@ -3,11 +3,12 @@
 Early userspace is the small environment that runs immediately after the kernel
 finishes its own initialization.
 
-In Mentat Linux, early userspace is intentionally simple:
+In AmazonSpiceOx, early userspace is intentionally simple:
 
 - BusyBox provides core commands.
-- `/init` is a readable shell script.
-- The root filesystem is generated from `rootfs/`.
+- `/init` is a readable stage 1 shell script in initramfs.
+- `/sbin/init` is a readable stage 2 shell script in the persistent rootfs.
+- The root filesystem image is generated from `rootfs/`.
 - QEMU provides a serial console and a virtual network device.
 
 The goal is not comfort yet. The goal is transparency: every boot step should
@@ -25,7 +26,7 @@ QEMU starts with user-mode networking:
 The kernel needs the virtio network driver built in, because this system does
 not load external kernel modules yet.
 
-Inside `/init`, Mentat Linux:
+Inside `/sbin/init`, AmazonSpiceOx:
 
 1. Brings up loopback.
 2. Tries to bring up `eth0`.

@@ -3,6 +3,7 @@ set -eu
 
 kernel_image="${1:?kernel image required}"
 initramfs_image="${2:?initramfs image required}"
+rootfs_image="${3:-}"
 
 qemu_bin="${QEMU_BIN:-qemu-system-x86_64}"
 qemu_memory="${QEMU_MEMORY:-512M}"
@@ -21,6 +22,11 @@ set -- \
     -no-reboot \
     -netdev user,id=net0 \
     -device virtio-net-pci,netdev=net0
+
+if [ -n "$rootfs_image" ]; then
+    set -- "$@" \
+        -drive "file=$rootfs_image,if=virtio,format=raw"
+fi
 
 if [ "${QEMU_DEBUG:-0}" = "1" ]; then
     # Wait for a debugger on TCP :1234 before the CPU starts executing.

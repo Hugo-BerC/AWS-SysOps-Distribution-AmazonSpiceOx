@@ -12,6 +12,7 @@ RUN apt-get update \
         ca-certificates \
         cpio \
         curl \
+        e2fsprogs \
         file \
         flex \
         gzip \

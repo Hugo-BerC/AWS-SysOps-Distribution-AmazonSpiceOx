@@ -1,4 +1,4 @@
-PROJECT := mentat-linux
+PROJECT := amazonspiceox
 
 KERNEL_ARCH ?= x86
 KERNEL_DEFCONFIG ?= x86_64_defconfig
@@ -13,6 +13,10 @@ OUT_DIR := out
 ROOTFS_TEMPLATE := rootfs
 INIT_FILE := initramfs/init
 KERNEL_HEADERS_DIR := $(BUILD_DIR)/kernel-headers
+ROOTFS_IMAGE := $(OUT_DIR)/rootfs.ext4
+ROOTFS_IMAGE_SIZE_MB ?= 256
+ROOTFS_LABEL ?= ASOXROOT
+ROOTFS_STAMP := $(ROOTFS_DIR)/.stamp
 
 LINUX_TARBALL := linux-$(LINUX_VERSION).tar.xz
 BUSYBOX_TARBALL := busybox-$(BUSYBOX_VERSION).tar.bz2
@@ -21,7 +25,8 @@ BUSYBOX_URL := https://busybox.net/downloads/$(BUSYBOX_TARBALL)
 
 KERNEL_SRC := $(SRC_DIR)/linux-$(LINUX_VERSION)
 BUSYBOX_SRC := $(SRC_DIR)/busybox-$(BUSYBOX_VERSION)
-KERNEL_CONFIG_FRAGMENT := configs/kernel/phase2-x86_64.config
+KERNEL_CONFIG_FRAGMENT := configs/kernel/phase3-x86_64.config
+ROOTFS_FILES := $(shell find $(ROOTFS_TEMPLATE) -type f 2>/dev/null)
 
 KERNEL_IMAGE := $(OUT_DIR)/bzImage
 INITRAMFS := $(OUT_DIR)/rootfs.cpio.gz
@@ -32,22 +37,23 @@ DETECTED_BUSYBOX_CC := $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-
 BUSYBOX_CC ?= $(DETECTED_BUSYBOX_CC)
 BUSYBOX_CC := $(if $(strip $(BUSYBOX_CC)),$(BUSYBOX_CC),$(DETECTED_BUSYBOX_CC))
 QEMU_MEMORY ?= 512M
-QEMU_APPEND ?= console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init
+QEMU_APPEND ?= console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw
 SMOKE_TIMEOUT ?= 30s
 
 .DEFAULT_GOAL := help
 
 .PHONY: help
 help:
-	@echo "Mentat Linux"
+	@echo "AmazonSpiceOx"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make deps       Check host tools"
-	@echo "  make all        Build kernel image and initramfs"
+	@echo "  make all        Build kernel, initramfs, and persistent root disk"
 	@echo "  make rootfs     Build the generated root filesystem"
 	@echo "  make initramfs  Package the generated rootfs as initramfs"
+	@echo "  make root-disk  Build the ext4 persistent root filesystem image"
 	@echo "  make run        Boot in QEMU"
-	@echo "  make smoke      Boot briefly and check MENTAT_LINUX_PHASE2_BOOT_OK"
+	@echo "  make smoke      Boot briefly and check AMAZONSPICEOX_PHASE3_BOOT_OK"
 	@echo "  make clean      Remove generated build/rootfs/output files"
 	@echo "  make distclean  Also remove downloaded tarballs"
 
@@ -56,7 +62,7 @@ deps:
 	sh scripts/check-tools.sh
 
 .PHONY: all
-all: $(KERNEL_IMAGE) $(INITRAMFS)
+all: $(KERNEL_IMAGE) $(INITRAMFS) $(ROOTFS_IMAGE)
 
 $(DL_DIR) $(SRC_DIR) $(OUT_DIR):
 	mkdir -p $@
@@ -91,7 +97,7 @@ $(KERNEL_HEADERS_DIR)/include/linux/types.h: $(KERNEL_SRC)/.config
 	rm -rf $(KERNEL_HEADERS_DIR)
 	$(MAKE) -C $(KERNEL_SRC) ARCH=$(KERNEL_ARCH) INSTALL_HDR_PATH="$(abspath $(KERNEL_HEADERS_DIR))" headers_install
 
-$(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile
+$(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile Makefile scripts/kconfig-set.sh
 	$(MAKE) -C $(BUSYBOX_SRC) allnoconfig
 	sh scripts/kconfig-set.sh $(BUSYBOX_SRC)/.config \
 		CAT=y \
@@ -115,6 +121,7 @@ $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile
 		MKDIR=y \
 		MKNOD=y \
 		MOUNT=y \
+		FEATURE_MOUNT_FLAGS=y \
 		MV=y \
 		PING=y \
 		PS=y \
@@ -124,6 +131,8 @@ $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile
 		SED=y \
 		SETSID=y \
 		SLEEP=y \
+		SWITCH_ROOT=y \
+		SYNC=y \
 		STATIC=y \
 		ASH=y \
 		SH_IS_ASH=y \
@@ -139,29 +148,38 @@ $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile
 	yes "" | $(MAKE) -C $(BUSYBOX_SRC) oldconfig
 
 .PHONY: rootfs
-rootfs: $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) scripts/build-rootfs.sh
+rootfs: $(ROOTFS_STAMP)
+
+$(ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs.sh
 	sh scripts/build-rootfs.sh "$(BUSYBOX_SRC)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(BUSYBOX_CC)" "$(JOBS)" "$(abspath $(KERNEL_HEADERS_DIR))"
+	touch "$@"
 
 .PHONY: initramfs
 initramfs: $(INITRAMFS)
 
-$(INITRAMFS): rootfs scripts/build-initramfs.sh | $(OUT_DIR)
+$(INITRAMFS): $(ROOTFS_STAMP) scripts/build-initramfs.sh | $(OUT_DIR)
 	sh scripts/build-initramfs.sh "$(ROOTFS_DIR)" "$@"
+
+.PHONY: root-disk
+root-disk: $(ROOTFS_IMAGE)
+
+$(ROOTFS_IMAGE): $(ROOTFS_STAMP) scripts/build-root-disk.sh | $(OUT_DIR)
+	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$@" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
 
 .PHONY: run
 run: all
-	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)"
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: smoke
 smoke: all
 	@set -eu; \
 	status=0; \
-	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" timeout $(SMOKE_TIMEOUT) sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" > $(OUT_DIR)/qemu-smoke.log 2>&1 || status=$$?; \
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" timeout $(SMOKE_TIMEOUT) sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" > $(OUT_DIR)/qemu-smoke.log 2>&1 || status=$$?; \
 	if [ "$$status" != "0" ] && [ "$$status" != "124" ]; then \
 		cat $(OUT_DIR)/qemu-smoke.log; \
 		exit "$$status"; \
 	fi; \
-	grep -q "MENTAT_LINUX_PHASE2_BOOT_OK" $(OUT_DIR)/qemu-smoke.log; \
+	grep -q "AMAZONSPICEOX_PHASE3_BOOT_OK" $(OUT_DIR)/qemu-smoke.log; \
 	echo "Boot marker found in $(OUT_DIR)/qemu-smoke.log"
 
 .PHONY: docker-build docker-shell docker-run
