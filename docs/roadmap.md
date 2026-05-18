@@ -66,12 +66,21 @@ arrakis:/#
 
 Goal: stop relying on the host toolchain for userspace.
 
-Planned:
+Bootstrap started:
 
-- binutils.
-- GCC.
-- musl or glibc.
-- controlled sysroot.
+- Dedicated `build/toolchain/` layout.
+- Sysroot export target.
+- Cross-binutils target.
+- GCC stage 1 target.
+- Minimal target `libgcc` bootstrap inside GCC stage 1.
+- musl sysroot installation target.
+- GCC stage 2 target.
+- cross-toolchain hello-world smoke target.
+
+Planned next:
+
+- first nontrivial package.
+- controlled sysroot growth.
 
 ## Phase V - Package Manager
 
