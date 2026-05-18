@@ -10,7 +10,7 @@ goal is learning Linux internals deeply and reproducibly.
 ## Current Status
 
 Phase III is complete.
-Phase IV bootstrap is in progress.
+Phase IV is in progress.
 
 AmazonSpiceOx now boots in two stages:
 
@@ -61,8 +61,11 @@ Useful targets:
 make toolchain-sysroot  # export kernel headers into build/toolchain/sysroot
 make binutils           # build cross-binutils for x86_64-amazonspiceox-linux-musl
 make gcc-stage1         # build the stage-1 cross C compiler and minimal libgcc
+make gcc-stage2         # rebuild the cross C compiler against musl
 make musl               # install musl into the Phase IV sysroot
-make toolchain          # bootstrap the current Phase IV foundation
+make toolchain          # bootstrap the current Phase IV toolchain through GCC stage 2
+make toolchain-hello    # build a static hello-world with the cross-toolchain
+make toolchain-hello-rootfs  # inject hello-world into the persistent rootfs image
 make rootfs     # build build/rootfs from rootfs/ + BusyBox + initramfs/init
 make initramfs  # package build/rootfs as out/rootfs.cpio.gz
 make root-disk  # build out/rootfs.ext4 from build/rootfs
@@ -79,6 +82,7 @@ out/rootfs.cpio.gz   initramfs stage 1 archive
 out/rootfs.ext4      persistent ext4 root filesystem image
 build/rootfs/        generated root filesystem tree
 build/toolchain/     Phase IV sysroot, tools, and sources
+out/toolchain-hello  static smoke-test binary built by the cross-toolchain
 ```
 
 ## Boot Flow
@@ -174,6 +178,30 @@ It also uses `--with-newlib` so stage 1 can install the minimal target
 `libgcc` runtime pieces that musl needs for compiler builtins like
 `__mulsc3` and `__mulxc3`.
 
+Once `make gcc-stage2` finishes, the same tool prefix is rebuilt against the
+musl-populated sysroot and becomes the main C compiler for the next steps.
+
+For a first proof that the toolchain is usable end to end:
+
+```sh
+make toolchain
+make toolchain-hello
+file out/toolchain-hello
+```
+
+To run that binary inside AmazonSpiceOx:
+
+```sh
+make toolchain-hello-rootfs
+make run
+```
+
+Then inside `arrakis:/#`:
+
+```sh
+/usr/local/bin/hello-toolchain
+```
+
 If the toolchain bootstrap needs to be retried cleanly, the smallest reset is:
 
 ```sh
@@ -188,7 +216,7 @@ security advisory stating that releases through `1.2.5` should be patched for
 base rather than a production-hardened final choice.
 
 Those `libgmp-dev`, `libmpfr-dev`, and `libmpc-dev` packages are required for
-`make gcc-stage1` and `make toolchain`.
+`make gcc-stage1`, `make gcc-stage2`, and `make toolchain`.
 
 ## Learning Check
 

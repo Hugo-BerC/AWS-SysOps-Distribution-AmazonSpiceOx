@@ -30,6 +30,7 @@ TOOLCHAIN_SYSROOT_STAMP := $(TOOLCHAIN_SYSROOT)/.headers-stamp
 BINUTILS_BUILD_STAMP := $(TOOLCHAIN_TOOLS_DIR)/.binutils-$(BINUTILS_VERSION)-stamp
 BINUTILS_EXTRACT_STAMP := $(TOOLCHAIN_SOURCES_DIR)/.binutils-$(BINUTILS_VERSION)-extract-stamp
 GCC_STAGE1_STAMP := $(TOOLCHAIN_TOOLS_DIR)/.gcc-stage1-$(GCC_VERSION)-stamp
+GCC_STAGE2_STAMP := $(TOOLCHAIN_TOOLS_DIR)/.gcc-stage2-$(GCC_VERSION)-stamp
 GCC_EXTRACT_STAMP := $(TOOLCHAIN_SOURCES_DIR)/.gcc-$(GCC_VERSION)-extract-stamp
 MUSL_BUILD_STAMP := $(TOOLCHAIN_SYSROOT)/.musl-$(MUSL_VERSION)-stamp
 MUSL_EXTRACT_STAMP := $(TOOLCHAIN_SOURCES_DIR)/.musl-$(MUSL_VERSION)-extract-stamp
@@ -51,6 +52,7 @@ BINUTILS_SRC := $(TOOLCHAIN_SOURCES_DIR)/binutils-current
 BINUTILS_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/binutils-$(BINUTILS_VERSION)
 GCC_SRC := $(TOOLCHAIN_SOURCES_DIR)/gcc-current
 GCC_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/gcc-$(GCC_VERSION)-stage1
+GCC_STAGE2_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/gcc-$(GCC_VERSION)-stage2
 MUSL_SRC := $(TOOLCHAIN_SOURCES_DIR)/musl-current
 MUSL_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/musl-$(MUSL_VERSION)
 KERNEL_CONFIG_FRAGMENT := configs/kernel/phase3-x86_64.config
@@ -59,6 +61,8 @@ ROOTFS_FILES := $(shell find $(ROOTFS_TEMPLATE) -type f 2>/dev/null)
 KERNEL_IMAGE := $(OUT_DIR)/bzImage
 INITRAMFS := $(OUT_DIR)/rootfs.cpio.gz
 BZIMAGE := $(KERNEL_SRC)/arch/x86/boot/bzImage
+TOOLCHAIN_HELLO_BIN := $(OUT_DIR)/toolchain-hello
+TOOLCHAIN_HELLO_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/hello-toolchain
 
 JOBS ?= $(shell nproc 2>/dev/null || echo 2)
 DETECTED_BUSYBOX_CC := $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-gcc || echo gcc)
@@ -80,8 +84,11 @@ help:
 	@echo "  make toolchain-sysroot  Export kernel headers into the Phase IV sysroot"
 	@echo "  make binutils   Build cross-binutils for $(TOOLCHAIN_TARGET)"
 	@echo "  make gcc-stage1 Build the stage-1 cross C compiler and libgcc"
+	@echo "  make gcc-stage2 Rebuild GCC against musl in the sysroot"
 	@echo "  make musl       Install musl into the Phase IV sysroot"
-	@echo "  make toolchain  Bootstrap the Phase IV toolchain foundation"
+	@echo "  make toolchain  Bootstrap the Phase IV toolchain through GCC stage 2"
+	@echo "  make toolchain-hello       Build a static hello-world with the cross-toolchain"
+	@echo "  make toolchain-hello-rootfs Copy the hello-world into build/rootfs and rebuild the disk image"
 	@echo "  make rootfs     Build the generated root filesystem"
 	@echo "  make initramfs  Package the generated rootfs as initramfs"
 	@echo "  make root-disk  Build the ext4 persistent root filesystem image"
@@ -191,8 +198,27 @@ $(MUSL_BUILD_STAMP): $(MUSL_EXTRACT_STAMP) $(GCC_STAGE1_STAMP) $(TOOLCHAIN_SYSRO
 	sh scripts/build-musl.sh "$(MUSL_SRC)" "$(MUSL_BUILD_DIR)" "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$(JOBS)"
 	touch "$@"
 
+.PHONY: gcc-stage2
+gcc-stage2: $(GCC_STAGE2_STAMP)
+
+$(GCC_STAGE2_STAMP): $(GCC_EXTRACT_STAMP) $(MUSL_BUILD_STAMP) scripts/build-gcc-stage2.sh | $(TOOLCHAIN_BUILD_DIR) $(TOOLCHAIN_TOOLS_DIR)
+	sh scripts/build-gcc-stage2.sh "$(GCC_SRC)" "$(GCC_STAGE2_BUILD_DIR)" "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$(JOBS)"
+	touch "$@"
+
 .PHONY: toolchain
-toolchain: toolchain-sysroot binutils gcc-stage1 musl
+toolchain: toolchain-sysroot binutils gcc-stage1 musl gcc-stage2
+
+.PHONY: toolchain-hello
+toolchain-hello: $(TOOLCHAIN_HELLO_BIN)
+
+$(TOOLCHAIN_HELLO_BIN): $(GCC_STAGE2_STAMP) scripts/build-toolchain-hello.sh | $(OUT_DIR)
+	sh scripts/build-toolchain-hello.sh "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$@"
+
+.PHONY: toolchain-hello-rootfs
+toolchain-hello-rootfs: $(ROOTFS_STAMP) $(TOOLCHAIN_HELLO_BIN) scripts/build-root-disk.sh
+	mkdir -p "$(dir $(TOOLCHAIN_HELLO_ROOTFS))"
+	install -m 0755 "$(TOOLCHAIN_HELLO_BIN)" "$(TOOLCHAIN_HELLO_ROOTFS)"
+	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$(ROOTFS_IMAGE)" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
 
 $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile Makefile scripts/kconfig-set.sh
 	$(MAKE) -C $(BUSYBOX_SRC) allnoconfig

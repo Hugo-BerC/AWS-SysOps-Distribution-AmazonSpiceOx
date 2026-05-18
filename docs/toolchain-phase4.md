@@ -31,11 +31,13 @@ Implemented in the repo:
 3. `make gcc-stage1` builds a freestanding cross C compiler and the minimal
    target `libgcc` runtime needed by musl.
 4. `make musl` installs musl into the sysroot.
+5. `make gcc-stage2` rebuilds the C compiler against the musl sysroot.
+6. `make toolchain-hello` produces a static smoke-test binary.
 
 Pending:
 
-1. GCC stage 2.
-2. first cross-compiled hello-world smoke test.
+1. first nontrivial package built with the AmazonSpiceOx toolchain.
+2. eventual language/runtime expansion beyond C when it is actually needed.
 
 ## Why This Order
 
@@ -47,7 +49,9 @@ Pending:
 - GCC stage 1 uses `--with-newlib` so it can still install the minimal target
   `libgcc` pieces that musl needs for compiler builtins.
 - musl gives the toolchain a real libc and startup files.
-- GCC stage 2 produces the usable compiler for later phases.
+- GCC stage 2 produces the usable C compiler for later phases.
+- A tiny static hello-world is the cheapest possible end-to-end confidence
+  check before moving on to real packages.
 
 ## Expected Outputs
 
@@ -65,6 +69,7 @@ build/toolchain/tools/bin/x86_64-amazonspiceox-linux-musl-as
 build/toolchain/tools/bin/x86_64-amazonspiceox-linux-musl-ld
 build/toolchain/tools/bin/x86_64-amazonspiceox-linux-musl-gcc
 build/toolchain/tools/lib/gcc/x86_64-amazonspiceox-linux-musl/14.3.0/libgcc.a
+out/toolchain-hello
 ```
 
 ## Version Note

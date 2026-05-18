@@ -103,9 +103,14 @@ Implemented:
 - `gcc-stage1` configured with `--with-newlib` so it can also install the
   minimal target `libgcc` pieces needed by musl for compiler builtins.
 - musl bootstrap target installing libc into the sysroot.
+- GCC stage 2 target rebuilding the cross C compiler against musl.
+- Static hello-world smoke target built by the cross-toolchain.
+- Rootfs injection target so the toolchain hello-world can run inside
+  AmazonSpiceOx.
 - Reproducible build scripts for sysroot and binutils.
 - Reproducible build script for GCC stage 1.
 - Reproducible build script for musl.
+- Reproducible build script for GCC stage 2.
 
 Current result:
 
@@ -113,14 +118,16 @@ Current result:
 make toolchain-sysroot
 make binutils
 make toolchain
+make toolchain-hello
 ```
 
 Notes:
 
 - This is the start of Phase IV, not the end of it.
-- GCC stage 2 is still pending.
 - The goal of this slice is to remove the first layer of dependence on the host
   userspace toolchain and establish a controlled target prefix.
 - The repo currently tracks musl `1.2.5`, the latest official release on the
   musl site at the time of writing, with the expectation that a later security
   patch or release will replace it for hardened use.
+- The next realistic step after this bootstrap is compiling a first nontrivial
+  userspace package with the AmazonSpiceOx toolchain.

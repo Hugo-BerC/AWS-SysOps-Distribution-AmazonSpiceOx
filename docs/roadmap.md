@@ -74,11 +74,12 @@ Bootstrap started:
 - GCC stage 1 target.
 - Minimal target `libgcc` bootstrap inside GCC stage 1.
 - musl sysroot installation target.
+- GCC stage 2 target.
+- cross-toolchain hello-world smoke target.
 
 Planned next:
 
-- GCC stage 2.
-- first cross-compiled hello-world.
+- first nontrivial package.
 - controlled sysroot growth.
 
 ## Phase V - Package Manager
