@@ -16,7 +16,10 @@ RUN apt-get update \
         file \
         flex \
         gzip \
+        libgmp-dev \
         libelf-dev \
+        libmpc-dev \
+        libmpfr-dev \
         libssl-dev \
         make \
         musl-tools \
