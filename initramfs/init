@@ -23,7 +23,11 @@ emergency_shell() {
     log "root device: $ROOT_DEVICE"
 
     while true; do
-        setsid cttyhack sh
+        if command -v cttyhack >/dev/null 2>&1; then
+            setsid cttyhack sh
+        else
+            setsid sh </dev/console >/dev/console 2>&1
+        fi
         log "emergency shell exited; restarting in 2 seconds"
         sleep 2
     done

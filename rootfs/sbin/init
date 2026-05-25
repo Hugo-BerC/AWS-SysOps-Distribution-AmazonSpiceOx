@@ -24,7 +24,11 @@ emergency_shell() {
     log "type 'exit' to return to the init recovery loop"
 
     while true; do
-        setsid cttyhack sh
+        if command -v cttyhack >/dev/null 2>&1; then
+            setsid cttyhack sh
+        else
+            setsid sh </dev/console >/dev/console 2>&1
+        fi
         log "emergency shell exited; restarting in 2 seconds"
         sleep 2
     done
@@ -74,7 +78,20 @@ setup_hostname() {
 
 setup_network() {
     log "initializing loopback"
-    ip link set lo up 2>/dev/null || ifconfig lo 127.0.0.1 up 2>/dev/null || true
+    if command -v ifup >/dev/null 2>&1; then
+        ifup lo 2>/dev/null || true
+    else
+        ip link set lo up 2>/dev/null || ifconfig lo 127.0.0.1 up 2>/dev/null || true
+    fi
+
+    if command -v ifup >/dev/null 2>&1; then
+        if ifup eth0 >/tmp/ifup-eth0.log 2>&1; then
+            log "eth0 configured through ifup"
+        else
+            log "ifup eth0 failed; see /tmp/ifup-eth0.log"
+        fi
+        return 0
+    fi
 
     if ip link set eth0 up 2>/dev/null || ifconfig eth0 up 2>/dev/null; then
         log "eth0 link is up"
@@ -83,6 +100,10 @@ setup_network() {
             udhcpc -i eth0 -q -n -t 3 -T 2 >/tmp/udhcpc.log 2>&1 \
                 && log "dhcp lease acquired on eth0" \
                 || log "dhcp did not complete; see /tmp/udhcpc.log"
+        elif command -v dhclient >/dev/null 2>&1; then
+            dhclient -v eth0 >/tmp/dhclient-eth0.log 2>&1 \
+                && log "dhcp lease acquired on eth0" \
+                || log "dhclient did not complete; see /tmp/dhclient-eth0.log"
         fi
     else
         log "eth0 not available yet"
@@ -105,7 +126,11 @@ start_shell() {
     echo
 
     while true; do
-        setsid cttyhack sh
+        if command -v cttyhack >/dev/null 2>&1; then
+            setsid cttyhack sh
+        else
+            setsid sh </dev/console >/dev/console 2>&1
+        fi
         log "interactive shell exited; restarting in 2 seconds"
         sleep 2
     done

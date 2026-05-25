@@ -62,35 +62,47 @@ AMAZONSPICEOX_PHASE3_BOOT_OK
 arrakis:/#
 ```
 
-## Phase IV - Toolchain
+## Phase IV - Debian Stable Rootfs
 
-Goal: stop relying on the host toolchain for userspace.
+Goal: assemble the root filesystem from upstream Debian packages instead of
+compiling the base userspace locally.
 
-Bootstrap started:
+Current direction:
 
-- Dedicated `build/toolchain/` layout.
-- Sysroot export target.
-- Cross-binutils target.
-- GCC stage 1 target.
-- Minimal target `libgcc` bootstrap inside GCC stage 1.
-- musl sysroot installation target.
-- GCC stage 2 target.
-- cross-toolchain hello-world smoke target.
+- Debian Stable repositories pinned in `configs/debian/sources.list`.
+- Manifest-driven package selection under `manifests/`.
+- `debootstrap --download-only` to cache packages locally.
+- `debootstrap` rootfs assembly plus AmazonSpiceOx overlays.
+- Existing initramfs and persistent ext4 image flow reused on top.
+
+Done when:
+
+- `make fetch` populates the Debian package cache.
+- `sudo -E make rootfs` generates a bootable Debian-based rootfs.
+- `make run` still reaches `arrakis:/#`.
 
 Planned next:
 
-- first nontrivial package.
-- controlled sysroot growth.
+- tighten package verification and cache validation.
+- add `base + debug` and `base + aws` profiles.
+- validate `apt` behavior inside the guest.
 
-## Phase V - Package Manager
+## Phase V - Overlay Profiles
 
-Goal: install packages through a tiny native interface.
+Goal: compose AmazonSpiceOx personalities from manifests and overlays.
 
-Example:
+Examples:
 
-```sh
-amazonspiceox install htop
+```text
+base + debug
+base + aws
+base + aws + security
 ```
+
+## Legacy - Toolchain Bootstrap
+
+The GCC/musl/toolchain work remains valuable, but it is no longer the default
+path for assembling the distro root filesystem.
 
 ## Phase VI - AWS Flavor
 
@@ -98,10 +110,10 @@ Goal: specialize the base for AWS SysOps work.
 
 Candidates:
 
-- awscli.
-- Terraform.
-- AWS SSM Agent.
-- kubectl.
-- eksctl.
-- cloud-init.
-- observability tools.
+- awscli
+- Terraform
+- AWS SSM Agent
+- kubectl
+- eksctl
+- cloud-init
+- observability tools

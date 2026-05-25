@@ -1,26 +1,177 @@
 # AmazonSpiceOx
 
-AmazonSpiceOx is an educational Linux distribution built from small, explicit
-pieces: vanilla Linux, BusyBox, initramfs, early userspace, a persistent ext4
-root filesystem, and QEMU.
+AmazonSpiceOx is an educational Linux distribution project focused on boot flow,
+root filesystem assembly, and cloud-oriented systems engineering.
 
-The long-term direction is an AWS SysOps-oriented distro, but the immediate
-goal is learning Linux internals deeply and reproducibly.
+The project started as a Linux-from-scratch style exercise. The current
+direction is more practical:
+
+- keep the custom kernel and initramfs flow
+- keep the persistent ext4 root filesystem image
+- stop compiling the whole userspace locally by default
+- assemble the rootfs from upstream binary packages
+- add AmazonSpiceOx overlays on top
+
+That gives us a project that is still low-level and educational, but much
+faster to iterate on.
+
+## Why Debian Stable
+
+AmazonSpiceOx now uses Debian Stable as its upstream package base.
+
+Why Debian instead of Alpine or Arch:
+
+- Debian Stable has a large package archive
+- `glibc` compatibility is friendlier for AWS tooling and common server
+  software
+- `debootstrap` gives us a clean, official rootfs bootstrap path
+- Debian is easier to keep reproducible than a rolling-release base
+- the package model matches the goal of "assemble, overlay, boot, validate"
+
+The default suite in this repo is currently:
+
+```text
+trixie
+```
+
+You can change it through `DEBIAN_SUITE` in the `Makefile` or on the command
+line.
+
+## Architecture
+
+Current boot and image flow:
+
+```text
+Debian mirror
+  -> package download cache
+  -> debootstrap rootfs assembly
+  -> AmazonSpiceOx overlays
+  -> custom initramfs
+  -> ext4 root disk
+  -> QEMU
+```
+
+Current runtime flow:
+
+```text
+Linux kernel
+  -> initramfs /init
+  -> mount /dev/vda
+  -> switch_root
+  -> /sbin/init
+  -> arrakis:/#
+```
+
+## Repository Layout
+
+```text
+amazonspiceox/
+|- configs/
+|  `- debian/
+|- docs/
+|- initramfs/
+|- kernel/
+|- manifests/
+|- packages/
+|- qemu/
+|- rootfs/
+|- scripts/
+|- build/
+|- downloads/
+`- out/
+```
+
+Important directories:
+
+- `rootfs/`: overlays copied into the generated Debian rootfs
+- `initramfs/`: stage-1 boot userspace
+- `manifests/`: package lists for rootfs composition
+- `configs/debian/`: Debian package source configuration
+- `scripts/`: reproducible build helpers
 
 ## Current Status
 
-Phase III is complete.
-Phase IV is in progress.
+Implemented:
 
-AmazonSpiceOx now boots in two stages:
+- vanilla Linux kernel build in QEMU
+- custom initramfs with stage-1 `/init`
+- persistent ext4 root filesystem
+- stage-2 `/sbin/init`
+- boot logging and basic network bring-up
+- Debian Stable rootfs assembly through `debootstrap`
+- manifest-driven package selection
 
-1. `initramfs/init` runs as stage 1, mounts `/proc`, `/sys`, and `/dev`,
-   discovers `/dev/vda`, mounts it at `/newroot`, and runs `switch_root`.
-2. `/sbin/init` runs from the ext4 root filesystem as the real stage 2 init,
-   configures early userspace, networking, hostname, boot logs, and launches a
-   BusyBox shell.
+Still intentionally small:
 
-Expected marker:
+- no systemd dependency
+- no installer
+- no package manager replacement yet
+- no AWS-specific overlay profile enabled by default
+
+## Build Requirements
+
+On Debian or Ubuntu hosts, install:
+
+```bash
+sudo apt update
+sudo apt install -y \
+  build-essential \
+  bc \
+  bison \
+  flex \
+  libssl-dev \
+  libelf-dev \
+  cpio \
+  curl \
+  xz-utils \
+  bzip2 \
+  gzip \
+  make \
+  qemu-system-x86 \
+  debootstrap \
+  binutils \
+  file \
+  ca-certificates \
+  e2fsprogs
+```
+
+Run a host check with:
+
+```bash
+make deps
+```
+
+Notes:
+
+- `make fetch` can run unprivileged
+- `make rootfs` requires `sudo` because `debootstrap` creates a real Debian
+  filesystem tree
+- `make image` is safest under `sudo` as well, because the generated rootfs can
+  contain root-owned paths such as `/root`
+
+## Quick Start
+
+From WSL or Linux:
+
+```bash
+make fetch
+make verify-packages
+sudo -E make rootfs
+make initramfs
+sudo -E make image
+make run
+```
+
+One-command build is also possible:
+
+```bash
+sudo -E make all
+make run
+```
+
+That is convenient, but it will leave more generated files owned by root.
+
+Expected boot marker:
 
 ```text
 AmazonSpiceOx - Phase III
@@ -28,210 +179,146 @@ AMAZONSPICEOX_PHASE3_BOOT_OK
 arrakis:/#
 ```
 
-## Build
+To exit QEMU in `-nographic` mode:
 
-On WSL or Linux:
-
-Base dependencies:
-
-```sh
-sudo apt install -y \
-  build-essential bc bison flex libssl-dev libelf-dev cpio curl xz-utils \
-  bzip2 gzip make qemu-system-x86 musl-tools file ca-certificates \
-  e2fsprogs
+```text
+Ctrl+a, then x
 ```
 
-Additional dependencies for Phase IV toolchain bootstrap:
+## Make Targets
 
-```sh
-sudo apt install -y libgmp-dev libmpfr-dev libmpc-dev
-```
+Main targets:
 
-Basic distro build:
-
-```sh
+```text
 make deps
-make all
+make fetch
+make verify-packages
+make rootfs
+make initramfs
+make image
 make run
+make smoke
 ```
 
-Useful targets:
+Useful extras:
 
-```sh
-make toolchain-sysroot  # export kernel headers into build/toolchain/sysroot
-make binutils           # build cross-binutils for x86_64-amazonspiceox-linux-musl
-make gcc-stage1         # build the stage-1 cross C compiler and minimal libgcc
-make gcc-stage2         # rebuild the cross C compiler against musl
-make musl               # install musl into the Phase IV sysroot
-make toolchain          # bootstrap the current Phase IV toolchain through GCC stage 2
-make toolchain-hello    # build a static hello-world with the cross-toolchain
-make toolchain-hello-rootfs  # inject hello-world into the persistent rootfs image
-make rootfs     # build build/rootfs from rootfs/ + BusyBox + initramfs/init
-make initramfs  # package build/rootfs as out/rootfs.cpio.gz
-make root-disk  # build out/rootfs.ext4 from build/rootfs
-make run        # boot QEMU with kernel + initramfs + ext4 root disk
-make smoke      # boot briefly and check the Phase III marker
+```text
+make legacy-rootfs
 make clean
+make distclean
 ```
 
-## Output
+`legacy-rootfs` keeps the older BusyBox-compiled rootfs flow around as
+educational reference. It is also still useful for the tiny initramfs build.
+
+## Manifests
+
+The rootfs is package-driven.
+
+Current manifests:
+
+- `manifests/base.txt`
+- `manifests/aws.txt`
+- `manifests/debug.txt`
+
+The default rootfs build uses:
 
 ```text
-out/bzImage          Linux kernel image
-out/rootfs.cpio.gz   initramfs stage 1 archive
-out/rootfs.ext4      persistent ext4 root filesystem image
-build/rootfs/        generated root filesystem tree
-build/toolchain/     Phase IV sysroot, tools, and sources
-out/toolchain-hello  static smoke-test binary built by the cross-toolchain
+manifests/base.txt
 ```
 
-## Boot Flow
+To expand the package set, pass a different manifest list:
 
-`make run` uses `scripts/run-qemu.sh`, which starts QEMU with:
-
-```sh
-qemu-system-x86_64 \
-  -kernel out/bzImage \
-  -initrd out/rootfs.cpio.gz \
-  -append "console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw" \
-  -display none \
-  -serial mon:stdio \
-  -no-reboot \
-  -netdev user,id=net0 \
-  -device virtio-net-pci,netdev=net0 \
-  -drive file=out/rootfs.ext4,if=virtio,format=raw
+```bash
+make fetch DEBIAN_MANIFESTS="manifests/base.txt manifests/debug.txt"
+sudo -E make rootfs DEBIAN_MANIFESTS="manifests/base.txt manifests/debug.txt"
 ```
 
-The boot path is:
+Package names are standard Debian package names.
+
+## Rootfs Strategy
+
+AmazonSpiceOx no longer treats local userspace compilation as the default path.
+
+The preferred workflow is:
+
+1. download packages from a public Debian mirror
+2. cache them locally
+3. assemble a minimal rootfs with `debootstrap`
+4. apply AmazonSpiceOx overlays from `rootfs/`
+5. boot and validate in QEMU
+
+This keeps the project understandable while removing a lot of unnecessary
+compiler bootstrap friction.
+
+## Networking
+
+The current rootfs overlay expects a simple Debian-style network config:
+
+- loopback enabled
+- `eth0` via DHCP
+- `ifupdown` preferred
+- fallback logic in `/sbin/init` for simpler environments
+
+Hostname defaults to:
 
 ```text
-kernel
-  -> initramfs /init
-  -> mount /dev/vda on /newroot
-  -> switch_root /newroot /sbin/init
-  -> persistent ext4 userspace
+arrakis
 ```
 
-## Repository Layout
+## Documentation
 
-```text
-kernel/       kernel notes
-rootfs/       source-controlled root filesystem template
-initramfs/    stage 1 initramfs PID 1 script
-scripts/      reproducible build and run helpers
-docs/         educational notes
-configs/      kernel and userspace configuration fragments
-qemu/         QEMU notes
-build/        generated sources/rootfs
-downloads/    downloaded upstream tarballs
-out/          final boot artifacts
-```
+Start here:
 
-## Changelog
+- [docs/boot-process.md](docs/boot-process.md)
+- [docs/mirror-rootfs.md](docs/mirror-rootfs.md)
+- [docs/persistent-rootfs.md](docs/persistent-rootfs.md)
+- [docs/roadmap.md](docs/roadmap.md)
+- [CHANGELOG.md](CHANGELOG.md)
 
-Project history is tracked in [CHANGELOG.md](<C:/Users/hugo.bermejo/Desktop/Terraform/AWS-SysOps-Distribution/CHANGELOG.md>).
+## Legacy Toolchain Work
 
-## Roadmap
+The repo still contains the earlier toolchain bootstrap work:
 
-1. Phase I: kernel + BusyBox + initramfs + shell in QEMU.
-2. Phase II: rootfs layout, proc/sys/dev, hostname, boot logs, basic network.
-3. Phase III: persistent block rootfs and controlled userspace startup.
-4. Phase IV: toolchain with binutils, GCC, and musl/glibc.
-5. Phase V: simple package manager, for example `amazonspiceox install htop`.
-6. Phase VI: AWS flavor with awscli, Terraform, SSM Agent, kubectl, eksctl.
+- `make toolchain-sysroot`
+- `make binutils`
+- `make gcc-stage1`
+- `make musl`
+- `make gcc-stage2`
 
-## Next Phase
+That work remains useful for learning, but it is no longer the main path for
+building the distro rootfs.
 
-The next logical step is Phase IV: build a controlled userspace toolchain so
-AmazonSpiceOx stops depending on the host compiler for future packages.
+## Design Principles
 
-The most realistic incremental path is:
+AmazonSpiceOx aims to stay:
 
-1. Build and install kernel headers into a dedicated sysroot.
-2. Build `binutils` for a target prefix such as `x86_64-amazonspiceox-linux-musl`.
-3. Build a minimal stage-1 GCC.
-4. Build musl against that sysroot.
-5. Rebuild GCC and target runtime pieces as the stage-2 compiler.
+- explicit
+- reproducible
+- small enough to understand
+- close to the boot process
+- useful for AWS and systems learning
 
-That keeps the project understandable and avoids jumping straight into a full
-"Linux From Scratch" leap in one commit.
+Avoid by default:
 
-Detailed notes for this phase live in [docs/toolchain-phase4.md](<C:/Users/hugo.bermejo/Desktop/Terraform/AWS-SysOps-Distribution/docs/toolchain-phase4.md>).
+- hidden build abstractions
+- large framework layers
+- systemd-specific assumptions
+- source-based rebuilds of the whole userspace
+- rolling-release instability in the base distro
 
-Today, the repo already includes the first two pieces of that bootstrap:
+## Next Direction
 
-```text
-build/toolchain/sysroot
-build/toolchain/tools/bin/x86_64-amazonspiceox-linux-musl-ld
-```
+Near-term goals:
 
-The current bootstrap now reaches:
+- validate the Debian mirror workflow end to end
+- grow overlay profiles such as `base + debug` and `base + aws`
+- add AWS-focused packages from Debian where practical
+- introduce custom package/install tooling only where it genuinely adds value
 
-```text
-build/toolchain/tools/bin/x86_64-amazonspiceox-linux-musl-gcc
-build/toolchain/tools/lib/gcc/x86_64-amazonspiceox-linux-musl/14.3.0/libgcc.a
-```
+Longer-term goals:
 
-`gcc-stage1` is configured with `--disable-gcov` so the bootstrap avoids
-building `libgcov` pieces that are not useful in this freestanding stage.
-It also uses `--with-newlib` so stage 1 can install the minimal target
-`libgcc` runtime pieces that musl needs for compiler builtins like
-`__mulsc3` and `__mulxc3`.
-
-Once `make gcc-stage2` finishes, the same tool prefix is rebuilt against the
-musl-populated sysroot and becomes the main C compiler for the next steps.
-
-For a first proof that the toolchain is usable end to end:
-
-```sh
-make toolchain
-make toolchain-hello
-file out/toolchain-hello
-```
-
-To run that binary inside AmazonSpiceOx:
-
-```sh
-make toolchain-hello-rootfs
-make run
-```
-
-Then inside `arrakis:/#`:
-
-```sh
-/usr/local/bin/hello-toolchain
-```
-
-If the toolchain bootstrap needs to be retried cleanly, the smallest reset is:
-
-```sh
-rm -rf build/toolchain
-make toolchain
-```
-
-For the current libc bootstrap, the repo uses `musl 1.2.5`, which is still the
-latest official release on the musl site. The musl project also publishes a
-security advisory stating that releases through `1.2.5` should be patched for
-`CVE-2025-26519`, so this version should be treated as an educational bootstrap
-base rather than a production-hardened final choice.
-
-Those `libgmp-dev`, `libmpfr-dev`, and `libmpc-dev` packages are required for
-`make gcc-stage1`, `make gcc-stage2`, and `make toolchain`.
-
-## Learning Check
-
-After booting, try:
-
-```sh
-mount
-ps
-hostname
-ip addr
-cat /var/log/boot.log
-cat /var/lib/amazonspiceox/rootfs-state
-echo survives-rebuild > /root/persistence-test
-sync
-```
-
-The file written under `/root` is inside `out/rootfs.ext4`. It persists across
-QEMU reboots as long as you do not delete or rebuild `out/rootfs.ext4`.
+- cloud-init support
+- AMI-friendly image outputs
+- immutable or semi-immutable rootfs variants
+- a clearer AmazonSpiceOx package and profile model

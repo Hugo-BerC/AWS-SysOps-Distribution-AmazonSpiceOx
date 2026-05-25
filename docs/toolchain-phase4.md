@@ -21,6 +21,7 @@ x86_64-amazonspiceox-linux-musl
 4. Build a stage-1 GCC without full libc support.
 5. Build musl into the sysroot.
 6. Rebuild GCC as a stage-2 compiler against musl.
+7. Build a small real package into the sysroot.
 
 ## Current Progress
 
@@ -33,10 +34,16 @@ Implemented in the repo:
 4. `make musl` installs musl into the sysroot.
 5. `make gcc-stage2` rebuilds the C compiler against the musl sysroot.
 6. `make toolchain-hello` produces a static smoke-test binary.
+7. `make zlib` installs the first nontrivial package into the sysroot.
+8. `make zlib-smoke` proves that package can be linked into a static target
+   binary.
+9. `make openssl` installs the first crypto/TLS dependency into the sysroot.
+10. `make openssl-smoke` proves that package can be linked into a static target
+    binary.
 
 Pending:
 
-1. first nontrivial package built with the AmazonSpiceOx toolchain.
+1. first HTTP client or transfer-oriented package.
 2. eventual language/runtime expansion beyond C when it is actually needed.
 
 ## Why This Order
@@ -52,6 +59,11 @@ Pending:
 - GCC stage 2 produces the usable C compiler for later phases.
 - A tiny static hello-world is the cheapest possible end-to-end confidence
   check before moving on to real packages.
+- zlib is a good first real package because it is small, common, and useful as
+  a dependency for later tools without introducing a large dependency graph.
+- OpenSSL on the `3.5` LTS branch is the next sensible layer because it brings
+  in real crypto and TLS capabilities without forcing us to solve a full HTTP
+  client stack in the same step.
 
 ## Expected Outputs
 
@@ -70,6 +82,12 @@ build/toolchain/tools/bin/x86_64-amazonspiceox-linux-musl-ld
 build/toolchain/tools/bin/x86_64-amazonspiceox-linux-musl-gcc
 build/toolchain/tools/lib/gcc/x86_64-amazonspiceox-linux-musl/14.3.0/libgcc.a
 out/toolchain-hello
+build/toolchain/sysroot/usr/include/zlib.h
+build/toolchain/sysroot/usr/lib/libz.a
+out/zlib-smoke
+build/toolchain/sysroot/usr/include/openssl/ssl.h
+build/toolchain/sysroot/usr/lib/libcrypto.a
+out/openssl-smoke
 ```
 
 ## Version Note
@@ -90,10 +108,18 @@ On Debian or Ubuntu systems, `gcc-stage1` typically needs:
 sudo apt install libgmp-dev libmpfr-dev libmpc-dev
 ```
 
+The `OpenSSL` package step also needs:
+
+```sh
+sudo apt install perl libtext-template-perl
+```
+
 ## Definition of Done
 
 Phase IV is in good shape when:
 
 - We can compile a small static hello-world with the AmazonSpiceOx toolchain.
+- We can build at least one real upstream package into the sysroot.
+- We can build a crypto/TLS dependency into the sysroot.
 - The resulting binary runs inside AmazonSpiceOx.
 - The repo no longer depends on the host compiler for core userspace growth.

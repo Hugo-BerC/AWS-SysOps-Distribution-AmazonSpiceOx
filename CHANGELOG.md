@@ -2,6 +2,34 @@
 
 All notable progress in AmazonSpiceOx is tracked here.
 
+## 2026-05-25 - Debian Stable Mirror Pivot
+
+Implemented:
+
+- Debian Stable became the new upstream package base.
+- Alpine-specific bootstrap pieces were removed from the primary path.
+- `configs/debian/sources.list` was added for pinned Debian repositories.
+- `make fetch` now uses `debootstrap --download-only` to cache `.deb`
+  packages from a public mirror.
+- `make rootfs` now builds the distro rootfs with `debootstrap` plus
+  AmazonSpiceOx overlays.
+- `scripts/build-rootfs.sh` now writes a Debian-style `apt` sources list into
+  the generated image.
+- `rootfs/sbin/init` was adjusted to prefer Debian networking tools such as
+  `ifup`.
+- `initramfs/init` and `rootfs/sbin/init` now fall back cleanly when
+  `cttyhack` is not present.
+- Manifests were converted to Debian package names.
+- Documentation and repo guidance were updated around the Debian workflow.
+
+Notes:
+
+- The package-driven rootfs model is now the default strategy.
+- The old BusyBox-compiled rootfs path remains available as `make legacy-rootfs`
+  for reference and for the tiny initramfs build.
+- The earlier toolchain work remains in the repo as educational material, but
+  it is no longer the default distro assembly path.
+
 ## Phase I - Minimal Boot
 
 Date: 2026-05
@@ -87,7 +115,7 @@ Notes:
 - The initramfs is no longer "the whole distro"; it is now the stage-1 boot
   environment that hands off to the real root filesystem.
 
-## Phase IV - Toolchain Bootstrap
+## Historical Phase IV - Toolchain Bootstrap
 
 Date: 2026-05
 
@@ -98,36 +126,15 @@ Implemented:
 - Kernel headers export target for the sysroot.
 - Cross-binutils bootstrap target for `x86_64-amazonspiceox-linux-musl`.
 - GCC stage 1 bootstrap target for `x86_64-amazonspiceox-linux-musl`.
-- `gcc-stage1` configured with `--disable-gcov` to avoid unnecessary
-  `libgcov` runtime pieces during freestanding bootstrap.
-- `gcc-stage1` configured with `--with-newlib` so it can also install the
-  minimal target `libgcc` pieces needed by musl for compiler builtins.
 - musl bootstrap target installing libc into the sysroot.
 - GCC stage 2 target rebuilding the cross C compiler against musl.
 - Static hello-world smoke target built by the cross-toolchain.
 - Rootfs injection target so the toolchain hello-world can run inside
   AmazonSpiceOx.
-- Reproducible build scripts for sysroot and binutils.
-- Reproducible build script for GCC stage 1.
-- Reproducible build script for musl.
-- Reproducible build script for GCC stage 2.
-
-Current result:
-
-```text
-make toolchain-sysroot
-make binutils
-make toolchain
-make toolchain-hello
-```
+- zlib bootstrap and smoke targets.
+- OpenSSL bootstrap and smoke targets.
 
 Notes:
 
-- This is the start of Phase IV, not the end of it.
-- The goal of this slice is to remove the first layer of dependence on the host
-  userspace toolchain and establish a controlled target prefix.
-- The repo currently tracks musl `1.2.5`, the latest official release on the
-  musl site at the time of writing, with the expectation that a later security
-  patch or release will replace it for hardened use.
-- The next realistic step after this bootstrap is compiling a first nontrivial
-  userspace package with the AmazonSpiceOx toolchain.
+- This work remains useful for learning and experimentation.
+- It is no longer the default path for assembling the distro root filesystem.
