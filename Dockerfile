@@ -23,7 +23,9 @@ RUN apt-get update \
         libssl-dev \
         make \
         musl-tools \
+        perl \
         qemu-system-x86 \
+        libtext-template-perl \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 

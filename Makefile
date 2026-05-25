@@ -3,10 +3,15 @@ PROJECT := amazonspiceox
 KERNEL_ARCH ?= x86
 KERNEL_DEFCONFIG ?= x86_64_defconfig
 LINUX_VERSION ?= 6.6.1
+DEBIAN_SUITE ?= trixie
+DEBIAN_ARCH ?= amd64
+DEBIAN_MIRROR ?= https://deb.debian.org/debian
 BUSYBOX_VERSION ?= 1.36.1
 BINUTILS_VERSION ?= 2.46.0
 GCC_VERSION ?= 14.3.0
 MUSL_VERSION ?= 1.2.5
+ZLIB_VERSION ?= 1.3.2
+OPENSSL_VERSION ?= 3.5.6
 
 BUILD_DIR := build
 DL_DIR := downloads
@@ -20,6 +25,15 @@ ROOTFS_IMAGE := $(OUT_DIR)/rootfs.ext4
 ROOTFS_IMAGE_SIZE_MB ?= 256
 ROOTFS_LABEL ?= ASOXROOT
 ROOTFS_STAMP := $(ROOTFS_DIR)/.stamp
+LEGACY_ROOTFS_DIR := $(BUILD_DIR)/legacy-rootfs
+LEGACY_ROOTFS_STAMP := $(LEGACY_ROOTFS_DIR)/.stamp
+INITRAMFS_ROOTFS_DIR := $(BUILD_DIR)/initramfs-rootfs
+INITRAMFS_ROOTFS_STAMP := $(INITRAMFS_ROOTFS_DIR)/.stamp
+MANIFEST_DIR := manifests
+DEBIAN_CONFIG_DIR := configs/debian
+DEBIAN_SOURCES_LIST := $(DEBIAN_CONFIG_DIR)/sources.list
+DEB_CACHE_DIR := $(DL_DIR)/debian/$(DEBIAN_SUITE)/$(DEBIAN_ARCH)/packages
+DEB_FETCH_STAMP := $(DL_DIR)/debian/$(DEBIAN_SUITE)/$(DEBIAN_ARCH)/.fetch-stamp
 TOOLCHAIN_DIR := $(BUILD_DIR)/toolchain
 TOOLCHAIN_SOURCES_DIR := $(TOOLCHAIN_DIR)/sources
 TOOLCHAIN_BUILD_DIR := $(TOOLCHAIN_DIR)/build
@@ -34,17 +48,27 @@ GCC_STAGE2_STAMP := $(TOOLCHAIN_TOOLS_DIR)/.gcc-stage2-$(GCC_VERSION)-stamp
 GCC_EXTRACT_STAMP := $(TOOLCHAIN_SOURCES_DIR)/.gcc-$(GCC_VERSION)-extract-stamp
 MUSL_BUILD_STAMP := $(TOOLCHAIN_SYSROOT)/.musl-$(MUSL_VERSION)-stamp
 MUSL_EXTRACT_STAMP := $(TOOLCHAIN_SOURCES_DIR)/.musl-$(MUSL_VERSION)-extract-stamp
+ZLIB_BUILD_STAMP := $(TOOLCHAIN_SYSROOT)/.zlib-$(ZLIB_VERSION)-stamp
+ZLIB_EXTRACT_STAMP := $(TOOLCHAIN_SOURCES_DIR)/.zlib-$(ZLIB_VERSION)-extract-stamp
+OPENSSL_BUILD_STAMP := $(TOOLCHAIN_SYSROOT)/.openssl-$(OPENSSL_VERSION)-stamp
+OPENSSL_EXTRACT_STAMP := $(TOOLCHAIN_SOURCES_DIR)/.openssl-$(OPENSSL_VERSION)-extract-stamp
 
 LINUX_TARBALL := linux-$(LINUX_VERSION).tar.xz
 BUSYBOX_TARBALL := busybox-$(BUSYBOX_VERSION).tar.bz2
 BINUTILS_TARBALL := binutils-$(BINUTILS_VERSION).tar.xz
 GCC_TARBALL := gcc-$(GCC_VERSION).tar.xz
 MUSL_TARBALL := musl-$(MUSL_VERSION).tar.gz
+ZLIB_TARBALL := zlib-$(ZLIB_VERSION).tar.gz
+OPENSSL_TARBALL := openssl-$(OPENSSL_VERSION).tar.gz
 LINUX_URL := https://cdn.kernel.org/pub/linux/kernel/v6.x/$(LINUX_TARBALL)
 BUSYBOX_URL := https://busybox.net/downloads/$(BUSYBOX_TARBALL)
 BINUTILS_URL := https://ftp.gnu.org/gnu/binutils/$(BINUTILS_TARBALL)
 GCC_URL := https://ftp.gnu.org/gnu/gcc/gcc-$(GCC_VERSION)/$(GCC_TARBALL)
 MUSL_URL := https://musl.libc.org/releases/$(MUSL_TARBALL)
+ZLIB_URL := https://zlib.net/$(ZLIB_TARBALL)
+OPENSSL_URL := https://openssl-library.org/source/$(OPENSSL_TARBALL)
+OPENSSL_MIRROR_URL := https://mirror.openssl-library.org/source/$(OPENSSL_TARBALL)
+OPENSSL_GITHUB_URL := https://github.com/openssl/openssl/releases/download/openssl-$(OPENSSL_VERSION)/$(OPENSSL_TARBALL)
 
 KERNEL_SRC := $(SRC_DIR)/linux-$(LINUX_VERSION)
 BUSYBOX_SRC := $(SRC_DIR)/busybox-$(BUSYBOX_VERSION)
@@ -55,6 +79,10 @@ GCC_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/gcc-$(GCC_VERSION)-stage1
 GCC_STAGE2_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/gcc-$(GCC_VERSION)-stage2
 MUSL_SRC := $(TOOLCHAIN_SOURCES_DIR)/musl-current
 MUSL_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/musl-$(MUSL_VERSION)
+ZLIB_SRC := $(TOOLCHAIN_SOURCES_DIR)/zlib-current
+ZLIB_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/zlib-$(ZLIB_VERSION)
+OPENSSL_SRC := $(TOOLCHAIN_SOURCES_DIR)/openssl-current
+OPENSSL_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/openssl-$(OPENSSL_VERSION)
 KERNEL_CONFIG_FRAGMENT := configs/kernel/phase3-x86_64.config
 ROOTFS_FILES := $(shell find $(ROOTFS_TEMPLATE) -type f 2>/dev/null)
 
@@ -63,6 +91,13 @@ INITRAMFS := $(OUT_DIR)/rootfs.cpio.gz
 BZIMAGE := $(KERNEL_SRC)/arch/x86/boot/bzImage
 TOOLCHAIN_HELLO_BIN := $(OUT_DIR)/toolchain-hello
 TOOLCHAIN_HELLO_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/hello-toolchain
+ZLIB_SMOKE_BIN := $(OUT_DIR)/zlib-smoke
+ZLIB_SMOKE_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/zlib-smoke
+OPENSSL_SMOKE_BIN := $(OUT_DIR)/openssl-smoke
+OPENSSL_SMOKE_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/openssl-smoke
+DEFAULT_MANIFESTS := $(MANIFEST_DIR)/base.txt
+ALL_MANIFESTS := $(wildcard $(MANIFEST_DIR)/*.txt)
+DEBIAN_MANIFESTS ?= $(DEFAULT_MANIFESTS)
 
 JOBS ?= $(shell nproc 2>/dev/null || echo 2)
 DETECTED_BUSYBOX_CC := $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-gcc || echo gcc)
@@ -80,16 +115,26 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  make deps       Check host tools"
-	@echo "  make all        Build kernel, initramfs, and persistent root disk"
+	@echo "  make all        Build kernel, Debian-based rootfs, initramfs, and ext4 image (rootfs/image may need sudo)"
+	@echo "  make fetch      Download Debian packages from the configured public mirror"
+	@echo "  make verify-packages Validate cached Debian package archives"
+	@echo "  make rootfs     Build the generated root filesystem from Debian packages and overlays (requires sudo)"
+	@echo "  make image      Build the ext4 persistent root filesystem image"
+	@echo "  make legacy-rootfs Build the older BusyBox-compiled rootfs flow for reference"
 	@echo "  make toolchain-sysroot  Export kernel headers into the Phase IV sysroot"
 	@echo "  make binutils   Build cross-binutils for $(TOOLCHAIN_TARGET)"
 	@echo "  make gcc-stage1 Build the stage-1 cross C compiler and libgcc"
 	@echo "  make gcc-stage2 Rebuild GCC against musl in the sysroot"
 	@echo "  make musl       Install musl into the Phase IV sysroot"
+	@echo "  make zlib       Build the first real package into the Phase IV sysroot"
+	@echo "  make openssl    Build OpenSSL into the Phase IV sysroot"
 	@echo "  make toolchain  Bootstrap the Phase IV toolchain through GCC stage 2"
 	@echo "  make toolchain-hello       Build a static hello-world with the cross-toolchain"
 	@echo "  make toolchain-hello-rootfs Copy the hello-world into build/rootfs and rebuild the disk image"
-	@echo "  make rootfs     Build the generated root filesystem"
+	@echo "  make zlib-smoke            Build a static zlib-linked smoke binary"
+	@echo "  make zlib-smoke-rootfs     Copy the zlib smoke binary into build/rootfs and rebuild the disk image"
+	@echo "  make openssl-smoke         Build a static OpenSSL-linked smoke binary"
+	@echo "  make openssl-smoke-rootfs  Copy the OpenSSL smoke binary into build/rootfs and rebuild the disk image"
 	@echo "  make initramfs  Package the generated rootfs as initramfs"
 	@echo "  make root-disk  Build the ext4 persistent root filesystem image"
 	@echo "  make run        Boot in QEMU"
@@ -122,6 +167,12 @@ $(DL_DIR)/$(GCC_TARBALL): | $(DL_DIR)
 $(DL_DIR)/$(MUSL_TARBALL): | $(DL_DIR)
 	curl --fail --location --output $@ $(MUSL_URL)
 
+$(DL_DIR)/$(ZLIB_TARBALL): | $(DL_DIR)
+	curl --fail --location --output $@ $(ZLIB_URL)
+
+$(DL_DIR)/$(OPENSSL_TARBALL): scripts/download-openssl.sh | $(DL_DIR)
+	sh scripts/download-openssl.sh "$@" "$(OPENSSL_URL)" "$(OPENSSL_MIRROR_URL)" "$(OPENSSL_GITHUB_URL)"
+
 $(KERNEL_SRC)/Makefile: $(DL_DIR)/$(LINUX_TARBALL) | $(SRC_DIR)
 	tar -C $(SRC_DIR) -xf $<
 
@@ -150,6 +201,22 @@ $(MUSL_EXTRACT_STAMP): $(DL_DIR)/$(MUSL_TARBALL) | $(TOOLCHAIN_SOURCES_DIR)
 	rm -rf "$(TOOLCHAIN_SOURCES_DIR)/$$topdir" "$(MUSL_SRC)"; \
 	tar -C "$(TOOLCHAIN_SOURCES_DIR)" -xf "$<"; \
 	ln -s "$$topdir" "$(MUSL_SRC)"; \
+	touch "$@"
+
+$(ZLIB_EXTRACT_STAMP): $(DL_DIR)/$(ZLIB_TARBALL) | $(TOOLCHAIN_SOURCES_DIR)
+	@set -eu; \
+	topdir=$$(tar -tf "$<" | head -1 | cut -d/ -f1); \
+	rm -rf "$(TOOLCHAIN_SOURCES_DIR)/$$topdir" "$(ZLIB_SRC)"; \
+	tar -C "$(TOOLCHAIN_SOURCES_DIR)" -xf "$<"; \
+	ln -s "$$topdir" "$(ZLIB_SRC)"; \
+	touch "$@"
+
+$(OPENSSL_EXTRACT_STAMP): $(DL_DIR)/$(OPENSSL_TARBALL) | $(TOOLCHAIN_SOURCES_DIR)
+	@set -eu; \
+	topdir=$$(tar -tf "$<" | head -1 | cut -d/ -f1); \
+	rm -rf "$(TOOLCHAIN_SOURCES_DIR)/$$topdir" "$(OPENSSL_SRC)"; \
+	tar -C "$(TOOLCHAIN_SOURCES_DIR)" -xf "$<"; \
+	ln -s "$$topdir" "$(OPENSSL_SRC)"; \
 	touch "$@"
 
 $(KERNEL_SRC)/.config: $(KERNEL_SRC)/Makefile $(KERNEL_CONFIG_FRAGMENT)
@@ -205,6 +272,20 @@ $(GCC_STAGE2_STAMP): $(GCC_EXTRACT_STAMP) $(MUSL_BUILD_STAMP) scripts/build-gcc-
 	sh scripts/build-gcc-stage2.sh "$(GCC_SRC)" "$(GCC_STAGE2_BUILD_DIR)" "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$(JOBS)"
 	touch "$@"
 
+.PHONY: zlib
+zlib: $(ZLIB_BUILD_STAMP)
+
+$(ZLIB_BUILD_STAMP): $(ZLIB_EXTRACT_STAMP) $(GCC_STAGE2_STAMP) scripts/build-zlib.sh | $(TOOLCHAIN_BUILD_DIR) $(TOOLCHAIN_SYSROOT)
+	sh scripts/build-zlib.sh "$(ZLIB_SRC)" "$(ZLIB_BUILD_DIR)" "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$(JOBS)"
+	touch "$@"
+
+.PHONY: openssl
+openssl: $(OPENSSL_BUILD_STAMP)
+
+$(OPENSSL_BUILD_STAMP): $(OPENSSL_EXTRACT_STAMP) $(GCC_STAGE2_STAMP) scripts/build-openssl.sh | $(TOOLCHAIN_BUILD_DIR) $(TOOLCHAIN_SYSROOT)
+	sh scripts/build-openssl.sh "$(OPENSSL_SRC)" "$(OPENSSL_BUILD_DIR)" "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$(JOBS)"
+	touch "$@"
+
 .PHONY: toolchain
 toolchain: toolchain-sysroot binutils gcc-stage1 musl gcc-stage2
 
@@ -219,6 +300,41 @@ toolchain-hello-rootfs: $(ROOTFS_STAMP) $(TOOLCHAIN_HELLO_BIN) scripts/build-roo
 	mkdir -p "$(dir $(TOOLCHAIN_HELLO_ROOTFS))"
 	install -m 0755 "$(TOOLCHAIN_HELLO_BIN)" "$(TOOLCHAIN_HELLO_ROOTFS)"
 	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$(ROOTFS_IMAGE)" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
+
+.PHONY: zlib-smoke
+zlib-smoke: $(ZLIB_SMOKE_BIN)
+
+$(ZLIB_SMOKE_BIN): $(ZLIB_BUILD_STAMP) scripts/build-zlib-smoke.sh | $(OUT_DIR)
+	sh scripts/build-zlib-smoke.sh "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$@"
+
+.PHONY: zlib-smoke-rootfs
+zlib-smoke-rootfs: $(ROOTFS_STAMP) $(ZLIB_SMOKE_BIN) scripts/build-root-disk.sh
+	mkdir -p "$(dir $(ZLIB_SMOKE_ROOTFS))"
+	install -m 0755 "$(ZLIB_SMOKE_BIN)" "$(ZLIB_SMOKE_ROOTFS)"
+	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$(ROOTFS_IMAGE)" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
+
+.PHONY: openssl-smoke
+openssl-smoke: $(OPENSSL_SMOKE_BIN)
+
+$(OPENSSL_SMOKE_BIN): $(OPENSSL_BUILD_STAMP) scripts/build-openssl-smoke.sh | $(OUT_DIR)
+	sh scripts/build-openssl-smoke.sh "$(abspath $(TOOLCHAIN_TOOLS_DIR))" "$(abspath $(TOOLCHAIN_SYSROOT))" "$(TOOLCHAIN_TARGET)" "$@"
+
+.PHONY: openssl-smoke-rootfs
+openssl-smoke-rootfs: $(ROOTFS_STAMP) $(OPENSSL_SMOKE_BIN) scripts/build-root-disk.sh
+	mkdir -p "$(dir $(OPENSSL_SMOKE_ROOTFS))"
+	install -m 0755 "$(OPENSSL_SMOKE_BIN)" "$(OPENSSL_SMOKE_ROOTFS)"
+	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$(ROOTFS_IMAGE)" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
+
+.PHONY: fetch
+fetch: $(DEB_FETCH_STAMP)
+
+$(DEB_FETCH_STAMP): $(DEBIAN_SOURCES_LIST) $(ALL_MANIFESTS) scripts/fetch-packages.sh | $(DL_DIR)
+	sh scripts/fetch-packages.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(abspath $(DEB_CACHE_DIR))" $(DEBIAN_MANIFESTS)
+	touch "$@"
+
+.PHONY: verify-packages
+verify-packages: $(DEB_FETCH_STAMP)
+	sh scripts/verify-packages.sh "$(abspath $(DEB_CACHE_DIR))"
 
 $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile Makefile scripts/kconfig-set.sh
 	$(MAKE) -C $(BUSYBOX_SRC) allnoconfig
@@ -270,21 +386,35 @@ $(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile Makefile scripts/kconfig-set.sh
 		UDHCPC=y
 	yes "" | $(MAKE) -C $(BUSYBOX_SRC) oldconfig
 
+.PHONY: legacy-rootfs
+legacy-rootfs: $(LEGACY_ROOTFS_STAMP)
+
+$(LEGACY_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs-legacy.sh
+	sh scripts/build-rootfs-legacy.sh "$(BUSYBOX_SRC)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(LEGACY_ROOTFS_DIR))" "$(BUSYBOX_CC)" "$(JOBS)" "$(abspath $(KERNEL_HEADERS_DIR))"
+	touch "$@"
+
 .PHONY: rootfs
 rootfs: $(ROOTFS_STAMP)
 
-$(ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs.sh
-	sh scripts/build-rootfs.sh "$(BUSYBOX_SRC)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(BUSYBOX_CC)" "$(JOBS)" "$(abspath $(KERNEL_HEADERS_DIR))"
+$(ROOTFS_STAMP): $(DEB_FETCH_STAMP) $(INIT_FILE) $(ROOTFS_FILES) $(DEBIAN_SOURCES_LIST) scripts/build-rootfs.sh
+	sh scripts/build-rootfs.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(DEBIAN_SOURCES_LIST)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(abspath $(DEB_CACHE_DIR))" $(DEBIAN_MANIFESTS)
+	touch "$@"
+
+$(INITRAMFS_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs-legacy.sh
+	sh scripts/build-rootfs-legacy.sh "$(BUSYBOX_SRC)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(INITRAMFS_ROOTFS_DIR))" "$(BUSYBOX_CC)" "$(JOBS)" "$(abspath $(KERNEL_HEADERS_DIR))"
 	touch "$@"
 
 .PHONY: initramfs
 initramfs: $(INITRAMFS)
 
-$(INITRAMFS): $(ROOTFS_STAMP) scripts/build-initramfs.sh | $(OUT_DIR)
-	sh scripts/build-initramfs.sh "$(ROOTFS_DIR)" "$@"
+$(INITRAMFS): $(INITRAMFS_ROOTFS_STAMP) scripts/build-initramfs.sh | $(OUT_DIR)
+	sh scripts/build-initramfs.sh "$(INITRAMFS_ROOTFS_DIR)" "$@"
 
 .PHONY: root-disk
 root-disk: $(ROOTFS_IMAGE)
+
+.PHONY: image
+image: root-disk
 
 $(ROOTFS_IMAGE): $(ROOTFS_STAMP) scripts/build-root-disk.sh | $(OUT_DIR)
 	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$@" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
