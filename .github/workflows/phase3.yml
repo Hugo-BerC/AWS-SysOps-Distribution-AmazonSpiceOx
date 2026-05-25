@@ -17,12 +17,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             bc \
+            binutils \
             bison \
             build-essential \
             bzip2 \
+            ca-certificates \
             cpio \
             curl \
+            debootstrap \
             e2fsprogs \
+            file \
             flex \
             gzip \
             libelf-dev \
@@ -36,7 +40,7 @@ jobs:
         run: make deps
 
       - name: Build
-        run: make all
+        run: sudo -E env "PATH=$PATH" make all
 
       - name: Phase III boot smoke test
-        run: make smoke
+        run: sudo -E env "PATH=$PATH" make smoke
