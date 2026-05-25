@@ -148,6 +148,8 @@ Notes:
   filesystem tree
 - `make image` is safest under `sudo` as well, because the generated rootfs can
   contain root-owned paths such as `/root`
+- the ext4 image builder auto-grows the image when the requested size is too
+  small for the generated Debian rootfs
 
 ## Quick Start
 
