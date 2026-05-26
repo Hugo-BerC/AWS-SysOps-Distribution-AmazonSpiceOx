@@ -24,6 +24,10 @@ truncate -s 256M out/rootfs.ext4
 mke2fs -t ext4 -F -L ASOXROOT -d build/rootfs out/rootfs.ext4
 ```
 
+In the current Debian-based workflow, the script also measures the generated
+rootfs and grows the requested image size automatically when 256 MB is not
+enough.
+
 The `-d build/rootfs` option is the key detail. It populates the ext4 image
 from a directory without mounting loop devices and without using `sudo`.
 
