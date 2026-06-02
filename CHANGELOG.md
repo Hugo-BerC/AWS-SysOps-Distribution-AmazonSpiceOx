@@ -2,6 +2,26 @@
 
 All notable progress in AmazonSpiceOx is tracked here.
 
+## 2026-05-26 - Profile Composition
+
+Implemented:
+
+- `ASOX_PROFILES` support for composing rootfs builds from profile components.
+- `base`, `debug`, and `aws` manifest support.
+- profile-specific overlays under `overlays/`.
+- profile-aware rootfs and ext4 image output paths.
+- `/etc/amazonspiceox-profile` written into the generated guest rootfs.
+- stage-2 init now reports the active profile at boot.
+- `/etc/profile.d` sourcing added to the base shell profile.
+- package cache validation tightened to inspect Debian package metadata and
+  contents when `dpkg-deb` is available.
+
+Notes:
+
+- `base` is always included automatically.
+- The current next validation target is checking `apt` behavior inside the
+  guest, now that profile composition exists.
+
 ## 2026-05-25 - Debian Stable Mirror Pivot
 
 Implemented:

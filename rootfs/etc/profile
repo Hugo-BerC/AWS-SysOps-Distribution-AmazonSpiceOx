@@ -1,6 +1,13 @@
 export PATH=/bin:/sbin:/usr/bin:/usr/sbin
 export PS1='arrakis:\w# '
 
+if [ -d /etc/profile.d ]; then
+    for profile_script in /etc/profile.d/*.sh; do
+        [ -r "$profile_script" ] || continue
+        . "$profile_script"
+    done
+fi
+
 if [ -f /etc/motd ]; then
     cat /etc/motd
 fi

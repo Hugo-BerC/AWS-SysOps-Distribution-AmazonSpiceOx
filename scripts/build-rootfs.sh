@@ -5,11 +5,12 @@ suite="${1:?Debian suite required}"
 arch="${2:?Debian architecture required}"
 mirror="${3:?Debian mirror required}"
 sources_list="${4:?sources.list template required}"
-rootfs_template="${5:?rootfs template directory required}"
+overlay_dirs_spec="${5:?overlay directories required}"
 init_file="${6:?init file required}"
 rootfs_dir="${7:?output rootfs directory required}"
 cache_dir="${8:?cache directory required}"
-shift 8
+profile_name="${9:?profile name required}"
+shift 9
 
 apply_overlay() {
     src_root="$1"
@@ -37,6 +38,20 @@ apply_overlay() {
         mkdir -p "$(dirname "$dest_path")"
         cp -a "$src_path" "$dest_path"
     done
+}
+
+apply_overlays() {
+    overlay_dirs="$1"
+    dst_root="$2"
+    old_ifs="$IFS"
+    IFS=":"
+
+    for overlay_dir in $overlay_dirs; do
+        [ -d "$overlay_dir" ] || continue
+        apply_overlay "$overlay_dir" "$dst_root"
+    done
+
+    IFS="$old_ifs"
 }
 
 if [ "$#" -eq 0 ]; then
@@ -76,9 +91,10 @@ debootstrap \
     --cache-dir="$cache_dir" \
     "$suite" "$rootfs_dir" "$mirror"
 
-apply_overlay "$rootfs_template" "$rootfs_dir"
+apply_overlays "$overlay_dirs_spec" "$rootfs_dir"
 
 mkdir -p \
+    "$rootfs_dir/etc/profile.d" \
     "$rootfs_dir/proc" \
     "$rootfs_dir/sys" \
     "$rootfs_dir/dev" \
@@ -90,6 +106,7 @@ mkdir -p \
 
 mkdir -p "$rootfs_dir/etc/apt"
 cp "$sources_list" "$rootfs_dir/etc/apt/sources.list"
+printf '%s\n' "$profile_name" > "$rootfs_dir/etc/amazonspiceox-profile"
 
 install -m 0755 "$init_file" "$rootfs_dir/init"
 
