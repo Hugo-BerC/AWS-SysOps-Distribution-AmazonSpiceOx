@@ -83,13 +83,18 @@ Done when:
 
 Planned next:
 
-- tighten package verification and cache validation.
-- add `base + debug` and `base + aws` profiles.
 - validate `apt` behavior inside the guest.
 
 ## Phase V - Overlay Profiles
 
 Goal: compose AmazonSpiceOx personalities from manifests and overlays.
+
+Initial implementation:
+
+- `ASOX_PROFILES="base debug"` support.
+- `ASOX_PROFILES="base aws"` support.
+- profile-specific rootfs and image output paths.
+- active profile recorded in `/etc/amazonspiceox-profile`.
 
 Examples:
 

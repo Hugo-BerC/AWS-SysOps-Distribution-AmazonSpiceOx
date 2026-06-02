@@ -5,7 +5,8 @@ persistent virtio root disk:
 
 1. QEMU loads `out/bzImage` with `-kernel`.
 2. QEMU passes `out/rootfs.cpio.gz` with `-initrd`.
-3. QEMU attaches `out/rootfs.ext4` as a virtio block device.
+3. QEMU attaches the active profile root image, such as
+   `out/rootfs-base.ext4`, as a virtio block device.
 4. The kernel decompresses itself and initializes early architecture code.
 5. The kernel unpacks the initramfs into a temporary root filesystem in RAM.
 6. The kernel executes `/init`.
@@ -26,7 +27,7 @@ qemu-system-x86_64 \
   -no-reboot \
   -netdev user,id=net0 \
   -device virtio-net-pci,netdev=net0 \
-  -drive file=out/rootfs.ext4,if=virtio,format=raw
+  -drive file=out/rootfs-<profile>.ext4,if=virtio,format=raw
 ```
 
 `console=ttyS0` sends kernel and userspace output to the serial console.

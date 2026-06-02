@@ -1,4 +1,6 @@
 PROJECT := amazonspiceox
+empty :=
+space := $(empty) $(empty)
 
 KERNEL_ARCH ?= x86
 KERNEL_DEFCONFIG ?= x86_64_defconfig
@@ -6,6 +8,7 @@ LINUX_VERSION ?= 6.6.1
 DEBIAN_SUITE ?= trixie
 DEBIAN_ARCH ?= amd64
 DEBIAN_MIRROR ?= https://deb.debian.org/debian
+ASOX_PROFILES ?= base
 BUSYBOX_VERSION ?= 1.36.1
 BINUTILS_VERSION ?= 2.46.0
 GCC_VERSION ?= 14.3.0
@@ -16,15 +19,13 @@ OPENSSL_VERSION ?= 3.5.6
 BUILD_DIR := build
 DL_DIR := downloads
 SRC_DIR := $(BUILD_DIR)/src
-ROOTFS_DIR := $(BUILD_DIR)/rootfs
 OUT_DIR := out
 ROOTFS_TEMPLATE := rootfs
+OVERLAY_DIR := overlays
 INIT_FILE := initramfs/init
 KERNEL_HEADERS_DIR := $(BUILD_DIR)/kernel-headers
-ROOTFS_IMAGE := $(OUT_DIR)/rootfs.ext4
 ROOTFS_IMAGE_SIZE_MB ?= 256
 ROOTFS_LABEL ?= ASOXROOT
-ROOTFS_STAMP := $(ROOTFS_DIR)/.stamp
 LEGACY_ROOTFS_DIR := $(BUILD_DIR)/legacy-rootfs
 LEGACY_ROOTFS_STAMP := $(LEGACY_ROOTFS_DIR)/.stamp
 INITRAMFS_ROOTFS_DIR := $(BUILD_DIR)/initramfs-rootfs
@@ -33,7 +34,6 @@ MANIFEST_DIR := manifests
 DEBIAN_CONFIG_DIR := configs/debian
 DEBIAN_SOURCES_LIST := $(DEBIAN_CONFIG_DIR)/sources.list
 DEB_CACHE_DIR := $(DL_DIR)/debian/$(DEBIAN_SUITE)/$(DEBIAN_ARCH)/packages
-DEB_FETCH_STAMP := $(DL_DIR)/debian/$(DEBIAN_SUITE)/$(DEBIAN_ARCH)/.fetch-stamp
 TOOLCHAIN_DIR := $(BUILD_DIR)/toolchain
 TOOLCHAIN_SOURCES_DIR := $(TOOLCHAIN_DIR)/sources
 TOOLCHAIN_BUILD_DIR := $(TOOLCHAIN_DIR)/build
@@ -84,7 +84,17 @@ ZLIB_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/zlib-$(ZLIB_VERSION)
 OPENSSL_SRC := $(TOOLCHAIN_SOURCES_DIR)/openssl-current
 OPENSSL_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/openssl-$(OPENSSL_VERSION)
 KERNEL_CONFIG_FRAGMENT := configs/kernel/phase3-x86_64.config
-ROOTFS_FILES := $(shell find $(ROOTFS_TEMPLATE) -type f 2>/dev/null)
+NORMALIZED_PROFILES := base $(filter-out base,$(strip $(ASOX_PROFILES)))
+ACTIVE_PROFILE_ID := $(subst $(space),-,$(strip $(NORMALIZED_PROFILES)))
+ACTIVE_PROFILE_NAME := $(subst $(space),+,$(strip $(NORMALIZED_PROFILES)))
+ROOTFS_DIR := $(BUILD_DIR)/rootfs-$(ACTIVE_PROFILE_ID)
+ROOTFS_IMAGE := $(OUT_DIR)/rootfs-$(ACTIVE_PROFILE_ID).ext4
+ROOTFS_STAMP := $(ROOTFS_DIR)/.stamp
+DEB_FETCH_STAMP := $(DL_DIR)/debian/$(DEBIAN_SUITE)/$(DEBIAN_ARCH)/.$(ACTIVE_PROFILE_ID)-fetch-stamp
+PROFILE_OVERLAY_DIRS := $(foreach profile,$(filter-out base,$(NORMALIZED_PROFILES)),$(OVERLAY_DIR)/$(profile))
+ROOTFS_OVERLAY_DIRS := $(ROOTFS_TEMPLATE) $(PROFILE_OVERLAY_DIRS)
+ROOTFS_OVERLAY_DIRS_COLON := $(subst $(space),:,$(strip $(ROOTFS_OVERLAY_DIRS)))
+ROOTFS_FILES := $(shell find $(ROOTFS_TEMPLATE) $(OVERLAY_DIR) -type f 2>/dev/null)
 
 KERNEL_IMAGE := $(OUT_DIR)/bzImage
 INITRAMFS := $(OUT_DIR)/rootfs.cpio.gz
@@ -95,9 +105,9 @@ ZLIB_SMOKE_BIN := $(OUT_DIR)/zlib-smoke
 ZLIB_SMOKE_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/zlib-smoke
 OPENSSL_SMOKE_BIN := $(OUT_DIR)/openssl-smoke
 OPENSSL_SMOKE_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/openssl-smoke
-DEFAULT_MANIFESTS := $(MANIFEST_DIR)/base.txt
 ALL_MANIFESTS := $(wildcard $(MANIFEST_DIR)/*.txt)
-DEBIAN_MANIFESTS ?= $(DEFAULT_MANIFESTS)
+DEBIAN_MANIFESTS ?= $(foreach profile,$(NORMALIZED_PROFILES),$(MANIFEST_DIR)/$(profile).txt)
+QEMU_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-$(ACTIVE_PROFILE_ID).log
 
 JOBS ?= $(shell nproc 2>/dev/null || echo 2)
 DETECTED_BUSYBOX_CC := $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-gcc || echo gcc)
@@ -116,6 +126,7 @@ help:
 	@echo "Targets:"
 	@echo "  make deps       Check host tools"
 	@echo "  make all        Build kernel, Debian-based rootfs, initramfs, and ext4 image (rootfs/image may need sudo)"
+	@echo "  make profile-info Show active profile, manifests, overlays, and output paths"
 	@echo "  make fetch      Download Debian packages from the configured public mirror"
 	@echo "  make verify-packages Validate cached Debian package archives"
 	@echo "  make rootfs     Build the generated root filesystem from Debian packages and overlays (requires sudo)"
@@ -130,17 +141,30 @@ help:
 	@echo "  make openssl    Build OpenSSL into the Phase IV sysroot"
 	@echo "  make toolchain  Bootstrap the Phase IV toolchain through GCC stage 2"
 	@echo "  make toolchain-hello       Build a static hello-world with the cross-toolchain"
-	@echo "  make toolchain-hello-rootfs Copy the hello-world into build/rootfs and rebuild the disk image"
+	@echo "  make toolchain-hello-rootfs Copy the hello-world into the active profile rootfs and rebuild the disk image"
 	@echo "  make zlib-smoke            Build a static zlib-linked smoke binary"
-	@echo "  make zlib-smoke-rootfs     Copy the zlib smoke binary into build/rootfs and rebuild the disk image"
+	@echo "  make zlib-smoke-rootfs     Copy the zlib smoke binary into the active profile rootfs and rebuild the disk image"
 	@echo "  make openssl-smoke         Build a static OpenSSL-linked smoke binary"
-	@echo "  make openssl-smoke-rootfs  Copy the OpenSSL smoke binary into build/rootfs and rebuild the disk image"
+	@echo "  make openssl-smoke-rootfs  Copy the OpenSSL smoke binary into the active profile rootfs and rebuild the disk image"
 	@echo "  make initramfs  Package the generated rootfs as initramfs"
 	@echo "  make root-disk  Build the ext4 persistent root filesystem image"
 	@echo "  make run        Boot in QEMU"
 	@echo "  make smoke      Boot briefly and check AMAZONSPICEOX_PHASE3_BOOT_OK"
-	@echo "  make clean      Remove generated build/rootfs/output files"
+	@echo "  make clean      Remove generated build/output files"
 	@echo "  make distclean  Also remove downloaded tarballs"
+	@echo ""
+	@echo "Profile selection:"
+	@echo "  make fetch ASOX_PROFILES=\"base debug\""
+	@echo "  sudo -E make rootfs ASOX_PROFILES=\"base aws\""
+
+.PHONY: profile-info
+profile-info:
+	@echo "Active profiles: $(NORMALIZED_PROFILES)"
+	@echo "Profile name: $(ACTIVE_PROFILE_NAME)"
+	@echo "Manifests: $(DEBIAN_MANIFESTS)"
+	@echo "Overlays: $(ROOTFS_OVERLAY_DIRS)"
+	@echo "Rootfs dir: $(ROOTFS_DIR)"
+	@echo "Rootfs image: $(ROOTFS_IMAGE)"
 
 .PHONY: deps
 deps:
@@ -397,7 +421,7 @@ $(LEGACY_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/lin
 rootfs: $(ROOTFS_STAMP)
 
 $(ROOTFS_STAMP): $(DEB_FETCH_STAMP) $(INIT_FILE) $(ROOTFS_FILES) $(DEBIAN_SOURCES_LIST) scripts/build-rootfs.sh
-	sh scripts/build-rootfs.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(DEBIAN_SOURCES_LIST)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(abspath $(DEB_CACHE_DIR))" $(DEBIAN_MANIFESTS)
+	sh scripts/build-rootfs.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(DEBIAN_SOURCES_LIST)" "$(ROOTFS_OVERLAY_DIRS_COLON)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(abspath $(DEB_CACHE_DIR))" "$(ACTIVE_PROFILE_NAME)" $(DEBIAN_MANIFESTS)
 	touch "$@"
 
 $(INITRAMFS_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs-legacy.sh
@@ -427,13 +451,13 @@ run: all
 smoke: all
 	@set -eu; \
 	status=0; \
-	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" timeout $(SMOKE_TIMEOUT) sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" > $(OUT_DIR)/qemu-smoke.log 2>&1 || status=$$?; \
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" timeout $(SMOKE_TIMEOUT) sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" > $(QEMU_SMOKE_LOG) 2>&1 || status=$$?; \
 	if [ "$$status" != "0" ] && [ "$$status" != "124" ]; then \
-		cat $(OUT_DIR)/qemu-smoke.log; \
+		cat $(QEMU_SMOKE_LOG); \
 		exit "$$status"; \
 	fi; \
-	grep -q "AMAZONSPICEOX_PHASE3_BOOT_OK" $(OUT_DIR)/qemu-smoke.log; \
-	echo "Boot marker found in $(OUT_DIR)/qemu-smoke.log"
+	grep -q "AMAZONSPICEOX_PHASE3_BOOT_OK" $(QEMU_SMOKE_LOG); \
+	echo "Boot marker found in $(QEMU_SMOKE_LOG)"
 
 .PHONY: docker-build docker-shell docker-run
 docker-build:

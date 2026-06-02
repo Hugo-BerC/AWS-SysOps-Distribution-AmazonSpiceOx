@@ -1,5 +1,5 @@
-# Add AWS-oriented packages here once the base mirror workflow is validated.
-# Example future candidates:
-# awscli
-# cloud-init
-# openssh-client
+awscli
+cloud-guest-utils
+cloud-init
+jq
+openssh-client

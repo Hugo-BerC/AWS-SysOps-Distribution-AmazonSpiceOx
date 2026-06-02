@@ -1,6 +1,11 @@
 # Persistent Root Filesystem
 
-Phase III introduces `out/rootfs.ext4`.
+Phase III introduces the persistent root disk image. In the current
+profile-aware workflow, that image is generated as:
+
+```text
+out/rootfs-<profile>.ext4
+```
 
 Before this phase, the whole system lived in initramfs. That means the root
 filesystem was unpacked into RAM at boot and disappeared when QEMU exited.
@@ -20,15 +25,15 @@ kernel
 `scripts/build-root-disk.sh` creates the image:
 
 ```sh
-truncate -s 256M out/rootfs.ext4
-mke2fs -t ext4 -F -L ASOXROOT -d build/rootfs out/rootfs.ext4
+truncate -s 256M out/rootfs-base.ext4
+mke2fs -t ext4 -F -L ASOXROOT -d build/rootfs-base out/rootfs-base.ext4
 ```
 
 In the current Debian-based workflow, the script also measures the generated
 rootfs and grows the requested image size automatically when 256 MB is not
 enough.
 
-The `-d build/rootfs` option is the key detail. It populates the ext4 image
+The `-d build/rootfs-<profile>` option is the key detail. It populates the ext4 image
 from a directory without mounting loop devices and without using `sudo`.
 
 ## Why virtio
@@ -36,7 +41,7 @@ from a directory without mounting loop devices and without using `sudo`.
 QEMU attaches the disk with:
 
 ```text
--drive file=out/rootfs.ext4,if=virtio,format=raw
+-drive file=out/rootfs-<profile>.ext4,if=virtio,format=raw
 ```
 
 Inside the guest, this appears as:
@@ -54,13 +59,13 @@ root=/dev/vda rootfstype=ext4 rw
 
 ## Persistence Rule
 
-Files written inside the running VM persist while `out/rootfs.ext4` is reused.
-They disappear when you rebuild the root disk image.
+Files written inside the running VM persist while the same profile-specific
+image is reused. They disappear when you rebuild that root disk image.
 
 `make run` reuses the existing image. To intentionally reset the persistent
 root, remove it and rebuild:
 
 ```sh
-rm -f out/rootfs.ext4
+rm -f out/rootfs-base.ext4
 make root-disk
 ```

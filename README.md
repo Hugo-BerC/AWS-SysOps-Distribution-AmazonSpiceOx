@@ -72,6 +72,7 @@ amazonspiceox/
 |- initramfs/
 |- kernel/
 |- manifests/
+|- overlays/
 |- packages/
 |- qemu/
 |- rootfs/
@@ -83,7 +84,8 @@ amazonspiceox/
 
 Important directories:
 
-- `rootfs/`: overlays copied into the generated Debian rootfs
+- `rootfs/`: base overlay copied into the generated Debian rootfs
+- `overlays/`: optional profile-specific overlays
 - `initramfs/`: stage-1 boot userspace
 - `manifests/`: package lists for rootfs composition
 - `configs/debian/`: Debian package source configuration
@@ -100,6 +102,7 @@ Implemented:
 - boot logging and basic network bring-up
 - Debian Stable rootfs assembly through `debootstrap`
 - manifest-driven package selection
+- composable `base`, `debug`, and `aws` profile building
 
 Still intentionally small:
 
@@ -156,6 +159,7 @@ Notes:
 From WSL or Linux:
 
 ```bash
+make profile-info
 make fetch
 make verify-packages
 sudo -E make rootfs
@@ -205,6 +209,7 @@ make smoke
 Useful extras:
 
 ```text
+make profile-info
 make legacy-rootfs
 make clean
 make distclean
@@ -213,9 +218,9 @@ make distclean
 `legacy-rootfs` keeps the older BusyBox-compiled rootfs flow around as
 educational reference. It is also still useful for the tiny initramfs build.
 
-## Manifests
+## Profiles and Manifests
 
-The rootfs is package-driven.
+The rootfs is package-driven and profile-aware.
 
 Current manifests:
 
@@ -223,20 +228,36 @@ Current manifests:
 - `manifests/aws.txt`
 - `manifests/debug.txt`
 
-The default rootfs build uses:
+Default build:
 
 ```text
-manifests/base.txt
+ASOX_PROFILES=base
 ```
 
-To expand the package set, pass a different manifest list:
+Examples:
 
 ```bash
-make fetch DEBIAN_MANIFESTS="manifests/base.txt manifests/debug.txt"
-sudo -E make rootfs DEBIAN_MANIFESTS="manifests/base.txt manifests/debug.txt"
+make fetch ASOX_PROFILES="base debug"
+sudo -E make rootfs ASOX_PROFILES="base debug"
+make run ASOX_PROFILES="base debug"
+```
+
+```bash
+make fetch ASOX_PROFILES="base aws"
+sudo -E make rootfs ASOX_PROFILES="base aws"
+make run ASOX_PROFILES="base aws"
 ```
 
 Package names are standard Debian package names.
+`base` is always included automatically.
+
+The active profile also changes the generated rootfs and image paths. For
+example:
+
+```text
+build/rootfs-base-debug/
+out/rootfs-base-debug.ext4
+```
 
 ## Rootfs Strategy
 
@@ -247,7 +268,7 @@ The preferred workflow is:
 1. download packages from a public Debian mirror
 2. cache them locally
 3. assemble a minimal rootfs with `debootstrap`
-4. apply AmazonSpiceOx overlays from `rootfs/`
+4. apply AmazonSpiceOx overlays from `rootfs/` and optional profile overlays
 5. boot and validate in QEMU
 
 This keeps the project understandable while removing a lot of unnecessary
@@ -273,6 +294,7 @@ arrakis
 Start here:
 
 - [docs/boot-process.md](docs/boot-process.md)
+- [docs/overlay-profiles.md](docs/overlay-profiles.md)
 - [docs/mirror-rootfs.md](docs/mirror-rootfs.md)
 - [docs/persistent-rootfs.md](docs/persistent-rootfs.md)
 - [docs/roadmap.md](docs/roadmap.md)
@@ -314,9 +336,9 @@ Avoid by default:
 Near-term goals:
 
 - validate the Debian mirror workflow end to end
-- grow overlay profiles such as `base + debug` and `base + aws`
 - add AWS-focused packages from Debian where practical
 - introduce custom package/install tooling only where it genuinely adds value
+- validate `apt` behavior inside the guest with the profile-based rootfs flow
 
 Longer-term goals:
 

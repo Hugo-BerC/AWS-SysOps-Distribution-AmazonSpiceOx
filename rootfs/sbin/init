@@ -12,11 +12,19 @@ export ENV=/etc/profile
 
 HOSTNAME_FILE=/etc/hostname
 BOOT_LOG=/var/log/boot.log
+PROFILE_FILE=/etc/amazonspiceox-profile
+ACTIVE_PROFILE=base
 
 log() {
     message="[init] $*"
     echo "$message"
     echo "$message" >> "$BOOT_LOG" 2>/dev/null || true
+}
+
+load_profile() {
+    if [ -f "$PROFILE_FILE" ]; then
+        ACTIVE_PROFILE="$(cat "$PROFILE_FILE")"
+    fi
 }
 
 emergency_shell() {
@@ -118,9 +126,11 @@ record_persistent_boot() {
 
 start_shell() {
     log "AmazonSpiceOx Phase III boot complete"
+    log "active profile: $ACTIVE_PROFILE"
     echo
     echo "AmazonSpiceOx - Phase III"
     echo "AMAZONSPICEOX_PHASE3_BOOT_OK"
+    echo "Profile: $ACTIVE_PROFILE"
     echo "Root filesystem: persistent ext4"
     echo "Kernel: $(uname -r)"
     echo
@@ -138,6 +148,7 @@ start_shell() {
 
 setup_runtime_dirs
 log "starting stage 2 userspace"
+load_profile
 mount_once proc /proc
 mount_once sysfs /sys
 setup_devices

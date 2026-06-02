@@ -15,10 +15,21 @@ for pkg in "$cache_dir"/*.deb; do
     fi
 
     found=1
-    ar t "$pkg" >/dev/null 2>&1 || {
-        echo "error: invalid deb archive: $pkg" >&2
-        exit 1
-    }
+    if command -v dpkg-deb >/dev/null 2>&1; then
+        dpkg-deb --info "$pkg" >/dev/null 2>&1 || {
+            echo "error: invalid deb metadata: $pkg" >&2
+            exit 1
+        }
+        dpkg-deb --contents "$pkg" >/dev/null 2>&1 || {
+            echo "error: invalid deb payload: $pkg" >&2
+            exit 1
+        }
+    else
+        ar t "$pkg" >/dev/null 2>&1 || {
+            echo "error: invalid deb archive: $pkg" >&2
+            exit 1
+        }
+    fi
 done
 
 if [ "$found" -eq 0 ]; then

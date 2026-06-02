@@ -1,6 +1,5 @@
-# Optional debugging packages for local experimentation.
-# Uncomment or copy these into a custom manifest when needed.
-# curl
-# htop
-# strace
-# vim-tiny
+curl
+htop
+jq
+strace
+vim-tiny
