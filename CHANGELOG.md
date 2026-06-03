@@ -2,6 +2,29 @@
 
 All notable progress in AmazonSpiceOx is tracked here.
 
+## 2026-06-02 - Guest Apt Validation
+
+Implemented:
+
+- `make smoke-apt` to boot the guest and validate `apt` from inside
+  AmazonSpiceOx.
+- kernel command line support for `asox.smoke=apt`.
+- in-guest `apt` smoke script under
+  `rootfs/usr/local/lib/amazonspiceox/smoke/apt.sh`.
+- CI now runs the new guest apt smoke after the normal boot smoke.
+- the initial `aws` profile was trimmed to keep `cloud-init` as a later
+  Phase VI candidate instead of part of the first profile slice.
+
+Notes:
+
+- the apt smoke currently validates `apt-get update`, package policy lookup,
+  and a `--download-only` reinstall of `ca-certificates`.
+- this gives us an end-to-end check that networking, DNS, repository metadata,
+  and package download behavior work from inside the guest.
+- `awscli` was split out of `manifests/aws.txt` into `manifests/awscli.txt`
+  so the `base+aws` profile can stay lighter and avoid current `debootstrap`
+  failures seen on some hosts while resolving Python crypto dependencies.
+
 ## 2026-05-26 - Profile Composition
 
 Implemented:

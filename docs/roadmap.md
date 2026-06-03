@@ -81,9 +81,10 @@ Done when:
 - `sudo -E make rootfs` generates a bootable Debian-based rootfs.
 - `make run` still reaches `arrakis:/#`.
 
-Planned next:
+Validation:
 
-- validate `apt` behavior inside the guest.
+- `make smoke-apt` now boots the guest, runs an `apt` validation pass from
+  inside AmazonSpiceOx, and checks for `AMAZONSPICEOX_APT_SMOKE_OK`.
 
 ## Phase V - Overlay Profiles
 

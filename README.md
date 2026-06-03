@@ -168,14 +168,8 @@ sudo -E make image
 make run
 ```
 
-One-command build is also possible:
-
-```bash
-sudo -E make all
-make run
-```
-
-That is convenient, but it will leave more generated files owned by root.
+Avoid `sudo -E make all` for regular local work. It can leave source trees in
+`build/src/` owned by root, which then breaks later non-root rebuilds.
 
 Expected boot marker:
 
@@ -204,6 +198,7 @@ make initramfs
 make image
 make run
 make smoke
+make smoke-apt
 ```
 
 Useful extras:
@@ -226,6 +221,7 @@ Current manifests:
 
 - `manifests/base.txt`
 - `manifests/aws.txt`
+- `manifests/awscli.txt`
 - `manifests/debug.txt`
 
 Default build:
@@ -250,6 +246,27 @@ make run ASOX_PROFILES="base aws"
 
 Package names are standard Debian package names.
 `base` is always included automatically.
+The current `aws` profile is intentionally lightweight and keeps the first
+Debian bootstrap focused on packages that behave well under `debootstrap`.
+`awscli` currently lives in its own optional manifest:
+
+```text
+manifests/awscli.txt
+```
+
+That means:
+
+- `ASOX_PROFILES="base aws"` gives you the light AWS-oriented slice
+- `awscli` is opt-in for now
+- `cloud-init` stays as a later Phase VI candidate
+
+Example with the optional AWS CLI manifest:
+
+```bash
+make fetch DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt manifests/awscli.txt"
+sudo -E make rootfs DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt manifests/awscli.txt"
+make run DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt manifests/awscli.txt"
+```
 
 The active profile also changes the generated rootfs and image paths. For
 example:
@@ -300,6 +317,27 @@ Start here:
 - [docs/roadmap.md](docs/roadmap.md)
 - [CHANGELOG.md](CHANGELOG.md)
 
+## Troubleshooting
+
+If you ever see source extraction errors like:
+
+```text
+tar: ... Cannot open: File exists
+tar: ... Cannot change mode ... Operation not permitted
+```
+
+that usually means a previous build path ran with `sudo` and left parts of
+`build/`, `downloads/`, or `out/` owned by root.
+
+Fix it in WSL with:
+
+```bash
+sudo chown -R "$USER:$USER" build downloads out
+```
+
+Then rerun the normal flow without `sudo` except for `make rootfs` and
+`make image`.
+
 ## Legacy Toolchain Work
 
 The repo still contains the earlier toolchain bootstrap work:
@@ -335,7 +373,6 @@ Avoid by default:
 
 Near-term goals:
 
-- validate the Debian mirror workflow end to end
 - add AWS-focused packages from Debian where practical
 - introduce custom package/install tooling only where it genuinely adds value
 - validate `apt` behavior inside the guest with the profile-based rootfs flow

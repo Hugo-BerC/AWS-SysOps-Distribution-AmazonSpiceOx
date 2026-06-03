@@ -84,6 +84,8 @@ ZLIB_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/zlib-$(ZLIB_VERSION)
 OPENSSL_SRC := $(TOOLCHAIN_SOURCES_DIR)/openssl-current
 OPENSSL_BUILD_DIR := $(TOOLCHAIN_BUILD_DIR)/openssl-$(OPENSSL_VERSION)
 KERNEL_CONFIG_FRAGMENT := configs/kernel/phase3-x86_64.config
+KERNEL_EXTRACT_STAMP := $(KERNEL_SRC)/.extract-stamp
+BUSYBOX_EXTRACT_STAMP := $(BUSYBOX_SRC)/.extract-stamp
 NORMALIZED_PROFILES := base $(filter-out base,$(strip $(ASOX_PROFILES)))
 ACTIVE_PROFILE_ID := $(subst $(space),-,$(strip $(NORMALIZED_PROFILES)))
 ACTIVE_PROFILE_NAME := $(subst $(space),+,$(strip $(NORMALIZED_PROFILES)))
@@ -108,6 +110,7 @@ OPENSSL_SMOKE_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/openssl-smoke
 ALL_MANIFESTS := $(wildcard $(MANIFEST_DIR)/*.txt)
 DEBIAN_MANIFESTS ?= $(foreach profile,$(NORMALIZED_PROFILES),$(MANIFEST_DIR)/$(profile).txt)
 QEMU_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-$(ACTIVE_PROFILE_ID).log
+QEMU_APT_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-apt-$(ACTIVE_PROFILE_ID).log
 
 JOBS ?= $(shell nproc 2>/dev/null || echo 2)
 DETECTED_BUSYBOX_CC := $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-gcc || echo gcc)
@@ -116,6 +119,7 @@ BUSYBOX_CC := $(if $(strip $(BUSYBOX_CC)),$(BUSYBOX_CC),$(DETECTED_BUSYBOX_CC))
 QEMU_MEMORY ?= 512M
 QEMU_APPEND ?= console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw
 SMOKE_TIMEOUT ?= 30s
+APT_SMOKE_TIMEOUT ?= 180s
 
 .DEFAULT_GOAL := help
 
@@ -150,6 +154,7 @@ help:
 	@echo "  make root-disk  Build the ext4 persistent root filesystem image"
 	@echo "  make run        Boot in QEMU"
 	@echo "  make smoke      Boot briefly and check AMAZONSPICEOX_PHASE3_BOOT_OK"
+	@echo "  make smoke-apt  Boot briefly, run apt validation inside the guest, and check AMAZONSPICEOX_APT_SMOKE_OK"
 	@echo "  make clean      Remove generated build/output files"
 	@echo "  make distclean  Also remove downloaded tarballs"
 	@echo ""
@@ -197,11 +202,13 @@ $(DL_DIR)/$(ZLIB_TARBALL): | $(DL_DIR)
 $(DL_DIR)/$(OPENSSL_TARBALL): scripts/download-openssl.sh | $(DL_DIR)
 	sh scripts/download-openssl.sh "$@" "$(OPENSSL_URL)" "$(OPENSSL_MIRROR_URL)" "$(OPENSSL_GITHUB_URL)"
 
-$(KERNEL_SRC)/Makefile: $(DL_DIR)/$(LINUX_TARBALL) | $(SRC_DIR)
-	tar -C $(SRC_DIR) -xf $<
+$(KERNEL_EXTRACT_STAMP): $(DL_DIR)/$(LINUX_TARBALL) scripts/extract-source.sh | $(SRC_DIR)
+	sh scripts/extract-source.sh "$(SRC_DIR)" "$<"
+	touch "$@"
 
-$(BUSYBOX_SRC)/Makefile: $(DL_DIR)/$(BUSYBOX_TARBALL) | $(SRC_DIR)
-	tar -C $(SRC_DIR) -xf $<
+$(BUSYBOX_EXTRACT_STAMP): $(DL_DIR)/$(BUSYBOX_TARBALL) scripts/extract-source.sh | $(SRC_DIR)
+	sh scripts/extract-source.sh "$(SRC_DIR)" "$<"
+	touch "$@"
 
 $(BINUTILS_EXTRACT_STAMP): $(DL_DIR)/$(BINUTILS_TARBALL) | $(TOOLCHAIN_SOURCES_DIR)
 	@set -eu; \
@@ -243,7 +250,7 @@ $(OPENSSL_EXTRACT_STAMP): $(DL_DIR)/$(OPENSSL_TARBALL) | $(TOOLCHAIN_SOURCES_DIR
 	ln -s "$$topdir" "$(OPENSSL_SRC)"; \
 	touch "$@"
 
-$(KERNEL_SRC)/.config: $(KERNEL_SRC)/Makefile $(KERNEL_CONFIG_FRAGMENT)
+$(KERNEL_SRC)/.config: $(KERNEL_EXTRACT_STAMP) $(KERNEL_CONFIG_FRAGMENT)
 	$(MAKE) -C $(KERNEL_SRC) ARCH=$(KERNEL_ARCH) $(KERNEL_DEFCONFIG)
 	sh $(KERNEL_SRC)/scripts/kconfig/merge_config.sh -m -O $(KERNEL_SRC) $(KERNEL_SRC)/.config $(KERNEL_CONFIG_FRAGMENT)
 	$(MAKE) -C $(KERNEL_SRC) ARCH=$(KERNEL_ARCH) olddefconfig
@@ -360,7 +367,7 @@ $(DEB_FETCH_STAMP): $(DEBIAN_SOURCES_LIST) $(ALL_MANIFESTS) scripts/fetch-packag
 verify-packages: $(DEB_FETCH_STAMP)
 	sh scripts/verify-packages.sh "$(abspath $(DEB_CACHE_DIR))"
 
-$(BUSYBOX_SRC)/.config: $(BUSYBOX_SRC)/Makefile Makefile scripts/kconfig-set.sh
+$(BUSYBOX_SRC)/.config: $(BUSYBOX_EXTRACT_STAMP) Makefile scripts/kconfig-set.sh
 	$(MAKE) -C $(BUSYBOX_SRC) allnoconfig
 	sh scripts/kconfig-set.sh $(BUSYBOX_SRC)/.config \
 		CAT=y \
@@ -449,15 +456,11 @@ run: all
 
 .PHONY: smoke
 smoke: all
-	@set -eu; \
-	status=0; \
-	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" timeout $(SMOKE_TIMEOUT) sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" > $(QEMU_SMOKE_LOG) 2>&1 || status=$$?; \
-	if [ "$$status" != "0" ] && [ "$$status" != "124" ]; then \
-		cat $(QEMU_SMOKE_LOG); \
-		exit "$$status"; \
-	fi; \
-	grep -q "AMAZONSPICEOX_PHASE3_BOOT_OK" $(QEMU_SMOKE_LOG); \
-	echo "Boot marker found in $(QEMU_SMOKE_LOG)"
+	sh scripts/run-smoke.sh boot "$(SMOKE_TIMEOUT)" "AMAZONSPICEOX_PHASE3_BOOT_OK" "$(QEMU_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-apt
+smoke-apt: all
+	sh scripts/run-smoke.sh apt "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_APT_SMOKE_OK" "$(QEMU_APT_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: docker-build docker-shell docker-run
 docker-build:

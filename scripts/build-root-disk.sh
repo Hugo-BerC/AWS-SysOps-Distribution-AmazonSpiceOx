@@ -33,4 +33,12 @@ fi
 truncate -s "${size_mb}M" "$image"
 mke2fs -q -t ext4 -F -L "$label" -d "$rootfs_dir" "$image"
 
+# When the image is built through sudo, hand the resulting artifact back to the
+# invoking user so unprivileged QEMU runs can still open it afterwards.
+if [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ]; then
+    chown "${SUDO_UID}:${SUDO_GID}" "$image"
+fi
+
+chmod 0644 "$image"
+
 echo "Root disk ready: $image (${size_mb}M, label=$label)"
