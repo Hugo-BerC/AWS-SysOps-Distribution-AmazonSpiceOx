@@ -13,13 +13,23 @@ export ENV=/etc/profile
 HOSTNAME_FILE=/etc/hostname
 BOOT_LOG=/var/log/boot.log
 PROFILE_FILE=/etc/amazonspiceox-profile
+RESOLV_CONF=/etc/resolv.conf
 ACTIVE_PROFILE=base
 SMOKE_MODE=none
+SMOKE_STATE_DIR=/var/lib/amazonspiceox/smoke
+SMOKE_STATUS_FILE=$SMOKE_STATE_DIR/apt.status
 
 log() {
     message="[init] $*"
     echo "$message"
     echo "$message" >> "$BOOT_LOG" 2>/dev/null || true
+}
+
+set_smoke_status() {
+    [ "$SMOKE_MODE" = "apt" ] || return 0
+    mkdir -p "$SMOKE_STATE_DIR"
+    printf '%s\n' "$1" > "$SMOKE_STATUS_FILE" 2>/dev/null || true
+    sync 2>/dev/null || true
 }
 
 load_profile() {
@@ -129,6 +139,19 @@ setup_network() {
     fi
 }
 
+setup_resolver() {
+    if [ -s "$RESOLV_CONF" ] && grep -q '^nameserver[[:space:]]' "$RESOLV_CONF" 2>/dev/null; then
+        log "resolver already configured"
+        return 0
+    fi
+
+    cat > "$RESOLV_CONF" <<'EOF'
+nameserver 10.0.2.3
+nameserver 1.1.1.1
+EOF
+    log "resolver configured with QEMU user-mode DNS fallback"
+}
+
 record_persistent_boot() {
     echo "booted from persistent rootfs" > /var/lib/amazonspiceox/rootfs-state
     sync 2>/dev/null || true
@@ -142,6 +165,12 @@ run_requested_smoke() {
             ;;
         apt)
             log "running requested apt smoke"
+            set_smoke_status "AMAZONSPICEOX_APT_INIT_LAUNCHING_SCRIPT"
+            if [ ! -x /usr/local/lib/amazonspiceox/smoke/apt.sh ]; then
+                set_smoke_status "AMAZONSPICEOX_APT_INIT_SCRIPT_MISSING"
+                log "apt smoke script is missing or not executable"
+                return 1
+            fi
             if /usr/local/lib/amazonspiceox/smoke/apt.sh; then
                 log "apt smoke completed successfully"
             else
@@ -166,7 +195,26 @@ finish_requested_smoke() {
 
     log "requested smoke finished; asking the guest to power off"
     sync 2>/dev/null || true
-    poweroff -f >/dev/null 2>&1 || halt -f >/dev/null 2>&1 || reboot -f >/dev/null 2>&1 || true
+
+    if command -v poweroff >/dev/null 2>&1; then
+        poweroff -f >/dev/null 2>&1 && return 0
+    fi
+
+    if command -v halt >/dev/null 2>&1; then
+        halt -f >/dev/null 2>&1 && return 0
+    fi
+
+    if command -v reboot >/dev/null 2>&1; then
+        reboot -f >/dev/null 2>&1 && return 0
+    fi
+
+    log "falling back to sysrq-based shutdown"
+    echo 1 > /proc/sys/kernel/sysrq 2>/dev/null || true
+    echo s > /proc/sysrq-trigger 2>/dev/null || true
+    sleep 1
+    echo u > /proc/sysrq-trigger 2>/dev/null || true
+    sleep 1
+    echo o > /proc/sysrq-trigger 2>/dev/null || echo b > /proc/sysrq-trigger 2>/dev/null || true
 }
 
 start_shell() {
@@ -197,9 +245,13 @@ load_profile
 mount_once proc /proc
 mount_once sysfs /sys
 read_boot_cmdline
+set_smoke_status "AMAZONSPICEOX_APT_INIT_STAGE2_READY"
 setup_devices
 setup_hostname
+set_smoke_status "AMAZONSPICEOX_APT_INIT_HOSTNAME_READY"
 setup_network
+set_smoke_status "AMAZONSPICEOX_APT_INIT_NETWORK_READY"
+setup_resolver
 record_persistent_boot
 run_requested_smoke
 finish_requested_smoke

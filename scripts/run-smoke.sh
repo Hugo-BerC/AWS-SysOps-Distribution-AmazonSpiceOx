@@ -49,11 +49,67 @@ show_diag_excerpt() {
     cat "$diag_file" >&2 || true
 }
 
+debugfs_capture() {
+    image_path="$1"
+    request="$2"
+    stderr_file="$3"
+
+    debugfs -R "$request" "$image_path" 2>"$stderr_file" || return 1
+}
+
 read_guest_file() {
     image_path="$1"
     guest_path="$2"
+    rel_path="${guest_path#/}"
+    stderr_file="$(mktemp)"
 
-    debugfs -R "cat $guest_path" "$image_path" 2>/dev/null || true
+    if debugfs_capture "$image_path" "cat $guest_path" "$stderr_file"; then
+        rm -f "$stderr_file"
+        return 0
+    fi
+
+    if debugfs_capture "$image_path" "cat $rel_path" "$stderr_file"; then
+        rm -f "$stderr_file"
+        return 0
+    fi
+
+    echo "smoke: debugfs could not read $guest_path from $image_path" >&2
+    cat "$stderr_file" >&2 || true
+    rm -f "$stderr_file"
+    return 1
+}
+
+list_guest_dir() {
+    image_path="$1"
+    guest_path="$2"
+    rel_path="${guest_path#/}"
+    stderr_file="$(mktemp)"
+
+    if debugfs_capture "$image_path" "ls -l $guest_path" "$stderr_file"; then
+        rm -f "$stderr_file"
+        return 0
+    fi
+
+    if debugfs_capture "$image_path" "ls -l $rel_path" "$stderr_file"; then
+        rm -f "$stderr_file"
+        return 0
+    fi
+
+    echo "smoke: debugfs could not list $guest_path from $image_path" >&2
+    cat "$stderr_file" >&2 || true
+    rm -f "$stderr_file"
+    return 1
+}
+
+repair_guest_fs() {
+    image_path="$1"
+
+    if ! command -v e2fsck >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo "smoke: running e2fsck on $image_path before guest file inspection" >&2
+    e2fsck -fy "$image_path" >/dev/null 2>&1 || true
 }
 
 mkdir -p "$(dirname "$log_path")"
@@ -68,10 +124,10 @@ diag_log_path="$(mktemp)"
 
 case "$mode" in
     boot)
-        append_args="${QEMU_APPEND:-}"
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw}"
         ;;
     apt)
-        append_args="${QEMU_APPEND:-} asox.smoke=apt"
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=apt"
         ;;
     *)
         echo "error: unknown smoke mode: $mode" >&2
@@ -86,10 +142,10 @@ echo "smoke: requested log path=$log_path" >&2
 status=0
 QEMU_MEMORY="${QEMU_MEMORY:-512M}" \
 QEMU_APPEND="$append_args" \
-QEMU_SERIAL_STDIO=1 \
-timeout "$timeout_value" \
+QEMU_SERIAL_FILE="$actual_log_path" \
+timeout --signal=INT --kill-after=5s "$timeout_value" \
 sh scripts/run-qemu.sh "$kernel_image" "$initramfs_image" "$rootfs_image" \
-    > "$actual_log_path" 2> "$diag_log_path" || status=$?
+    > /dev/null 2> "$diag_log_path" || status=$?
 
 echo "smoke: qemu wrapper exit status=$status" >&2
 
@@ -102,7 +158,8 @@ fi
 marker_found=0
 
 if [ "$mode" = "apt" ]; then
-    guest_status="$(read_guest_file "$rootfs_image" /var/lib/amazonspiceox/smoke/apt.status)"
+    repair_guest_fs "$rootfs_image"
+    guest_status="$(read_guest_file "$rootfs_image" /var/lib/amazonspiceox/smoke/apt.status || true)"
 
     if printf '%s\n' "$guest_status" | grep -q "$marker"; then
         marker_found=1
@@ -110,8 +167,18 @@ if [ "$mode" = "apt" ]; then
         echo "smoke: guest apt status file did not contain marker: $marker" >&2
         echo "smoke: guest apt status content:" >&2
         printf '%s\n' "$guest_status" >&2
+        echo "smoke: guest /var/lib/amazonspiceox directory:" >&2
+        list_guest_dir "$rootfs_image" /var/lib/amazonspiceox >&2 || true
+        echo "smoke: guest /var/lib/amazonspiceox/smoke directory:" >&2
+        list_guest_dir "$rootfs_image" /var/lib/amazonspiceox/smoke >&2 || true
+        echo "smoke: guest persistent root marker:" >&2
+        read_guest_file "$rootfs_image" /var/lib/amazonspiceox/rootfs-state >&2 || true
+        echo "smoke: guest /var/log directory:" >&2
+        list_guest_dir "$rootfs_image" /var/log >&2 || true
+        echo "smoke: guest boot log content:" >&2
+        read_guest_file "$rootfs_image" /var/log/boot.log >&2 || true
         echo "smoke: guest apt log content:" >&2
-        read_guest_file "$rootfs_image" /var/log/apt-smoke.log >&2
+        read_guest_file "$rootfs_image" /var/log/apt-smoke.log >&2 || true
     fi
 else
     if grep -q "$marker" "$actual_log_path"; then
