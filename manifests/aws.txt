@@ -1,5 +1,7 @@
-awscli
 cloud-guest-utils
-cloud-init
 jq
 openssh-client
+# cloud-init remains a later Phase VI candidate; it is intentionally kept out
+# of the first AWS profile slice to keep the Debian profile bootstrap lighter.
+# awscli is split into a separate manifest for now because the current trixie
+# dependency chain can fail during debootstrap on some hosts.

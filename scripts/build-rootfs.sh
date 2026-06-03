@@ -83,13 +83,20 @@ echo "Building Debian-based rootfs at $rootfs_dir"
 rm -rf "$rootfs_dir"
 mkdir -p "$rootfs_dir" "$cache_dir"
 
-debootstrap \
+if ! debootstrap \
     --arch="$arch" \
     --components=main \
     --variant=minbase \
     --include="$include_list" \
     --cache-dir="$cache_dir" \
-    "$suite" "$rootfs_dir" "$mirror"
+    "$suite" "$rootfs_dir" "$mirror"; then
+    echo "error: debootstrap failed for profile $profile_name" >&2
+    if [ -f "$rootfs_dir/debootstrap/debootstrap.log" ]; then
+        echo "error: tail of $rootfs_dir/debootstrap/debootstrap.log" >&2
+        tail -n 120 "$rootfs_dir/debootstrap/debootstrap.log" >&2 || true
+    fi
+    exit 1
+fi
 
 apply_overlays "$overlay_dirs_spec" "$rootfs_dir"
 
@@ -112,6 +119,10 @@ install -m 0755 "$init_file" "$rootfs_dir/init"
 
 if [ -f "$rootfs_dir/sbin/init" ]; then
     chmod 0755 "$rootfs_dir/sbin/init"
+fi
+
+if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/apt.sh" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/apt.sh"
 fi
 
 chmod 0700 "$rootfs_dir/root"

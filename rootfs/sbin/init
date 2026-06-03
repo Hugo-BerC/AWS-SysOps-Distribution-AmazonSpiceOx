@@ -14,6 +14,7 @@ HOSTNAME_FILE=/etc/hostname
 BOOT_LOG=/var/log/boot.log
 PROFILE_FILE=/etc/amazonspiceox-profile
 ACTIVE_PROFILE=base
+SMOKE_MODE=none
 
 log() {
     message="[init] $*"
@@ -25,6 +26,16 @@ load_profile() {
     if [ -f "$PROFILE_FILE" ]; then
         ACTIVE_PROFILE="$(cat "$PROFILE_FILE")"
     fi
+}
+
+read_boot_cmdline() {
+    for arg in $(cat /proc/cmdline 2>/dev/null || true); do
+        case "$arg" in
+            asox.smoke=*)
+                SMOKE_MODE="${arg#asox.smoke=}"
+                ;;
+        esac
+    done
 }
 
 emergency_shell() {
@@ -124,6 +135,40 @@ record_persistent_boot() {
     log "persistent rootfs marker written to /var/lib/amazonspiceox/rootfs-state"
 }
 
+run_requested_smoke() {
+    case "$SMOKE_MODE" in
+        ""|none)
+            return 0
+            ;;
+        apt)
+            log "running requested apt smoke"
+            if /usr/local/lib/amazonspiceox/smoke/apt.sh; then
+                log "apt smoke completed successfully"
+            else
+                echo "AMAZONSPICEOX_APT_SMOKE_FAIL"
+                printf '%s\n' "AMAZONSPICEOX_APT_SMOKE_FAIL" > /var/lib/amazonspiceox/smoke/apt.status 2>/dev/null || true
+                sync 2>/dev/null || true
+                log "apt smoke failed"
+            fi
+            ;;
+        *)
+            log "unknown requested smoke mode: $SMOKE_MODE"
+            ;;
+    esac
+}
+
+finish_requested_smoke() {
+    case "$SMOKE_MODE" in
+        ""|none)
+            return 0
+            ;;
+    esac
+
+    log "requested smoke finished; asking the guest to power off"
+    sync 2>/dev/null || true
+    poweroff -f >/dev/null 2>&1 || halt -f >/dev/null 2>&1 || reboot -f >/dev/null 2>&1 || true
+}
+
 start_shell() {
     log "AmazonSpiceOx Phase III boot complete"
     log "active profile: $ACTIVE_PROFILE"
@@ -151,8 +196,11 @@ log "starting stage 2 userspace"
 load_profile
 mount_once proc /proc
 mount_once sysfs /sys
+read_boot_cmdline
 setup_devices
 setup_hostname
 setup_network
 record_persistent_boot
+run_requested_smoke
+finish_requested_smoke
 start_shell

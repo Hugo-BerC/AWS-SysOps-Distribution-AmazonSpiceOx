@@ -46,6 +46,7 @@ The selected package lists come from:
 manifests/base.txt
 manifests/debug.txt
 manifests/aws.txt
+manifests/awscli.txt
 ```
 
 ## Output Paths
@@ -76,5 +77,9 @@ Inside the guest, the active profile is recorded in:
 - `base`: bootable minimal Debian rootfs
 - `debug`: quality-of-life tools such as `curl`, `htop`, `jq`, `strace`, and
   `vim-tiny`
-- `aws`: first AWS-oriented package slice, including `awscli`, `cloud-init`,
-  `cloud-guest-utils`, `jq`, and `openssh-client`
+- `aws`: first AWS-oriented package slice, including `cloud-guest-utils`,
+  `jq`, and `openssh-client`
+- `awscli.txt`: optional add-on manifest for `awscli`
+
+`cloud-init` remains a later Phase VI candidate rather than part of this first
+AWS profile cut.

@@ -44,3 +44,6 @@ jobs:
 
       - name: Phase III boot smoke test
         run: sudo -E env "PATH=$PATH" make smoke
+
+      - name: Guest apt smoke test
+        run: sudo -E env "PATH=$PATH" make smoke-apt

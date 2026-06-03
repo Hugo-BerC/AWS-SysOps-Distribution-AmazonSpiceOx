@@ -46,6 +46,7 @@ sudo -E make rootfs
 make initramfs
 sudo -E make image
 make run
+make smoke-apt
 ```
 
 ## Notes
@@ -55,5 +56,9 @@ make run
   creates a real Debian filesystem tree.
 - `ASOX_PROFILES` selects which manifests and overlays are composed into the
   generated rootfs.
+- `make smoke-apt` validates that `apt` can refresh metadata and download a
+  package from inside the guest.
+- the current apt smoke retries `apt-get update` and asks the guest to power
+  off once the validation ends.
 - The legacy toolchain path still exists in the repo for educational reference.
 - The legacy BusyBox-only rootfs path still exists as `make legacy-rootfs`.
