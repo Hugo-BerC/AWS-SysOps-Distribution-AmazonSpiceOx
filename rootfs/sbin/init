@@ -105,6 +105,14 @@ setup_hostname() {
     log "hostname set to $name"
 }
 
+network_has_ipv4() {
+    ip -4 addr show dev eth0 2>/dev/null | grep -q 'inet '
+}
+
+network_has_default_route() {
+    ip route show default 2>/dev/null | grep -q '^default '
+}
+
 setup_network() {
     log "initializing loopback"
     if command -v ifup >/dev/null 2>&1; then
@@ -115,11 +123,14 @@ setup_network() {
 
     if command -v ifup >/dev/null 2>&1; then
         if ifup eth0 >/tmp/ifup-eth0.log 2>&1; then
-            log "eth0 configured through ifup"
+            if network_has_ipv4 && network_has_default_route; then
+                log "eth0 configured through ifup"
+                return 0
+            fi
+            log "ifup eth0 returned success, but IPv4 or default route is still missing"
         else
             log "ifup eth0 failed; see /tmp/ifup-eth0.log"
         fi
-        return 0
     fi
 
     if ip link set eth0 up 2>/dev/null || ifconfig eth0 up 2>/dev/null; then
@@ -130,9 +141,15 @@ setup_network() {
                 && log "dhcp lease acquired on eth0" \
                 || log "dhcp did not complete; see /tmp/udhcpc.log"
         elif command -v dhclient >/dev/null 2>&1; then
-            dhclient -v eth0 >/tmp/dhclient-eth0.log 2>&1 \
+            dhclient -v -1 eth0 >/tmp/dhclient-eth0.log 2>&1 \
                 && log "dhcp lease acquired on eth0" \
                 || log "dhclient did not complete; see /tmp/dhclient-eth0.log"
+        fi
+
+        if network_has_ipv4 && network_has_default_route; then
+            log "eth0 has IPv4 connectivity after DHCP fallback"
+        else
+            log "eth0 still lacks IPv4 connectivity after DHCP fallback"
         fi
     else
         log "eth0 not available yet"

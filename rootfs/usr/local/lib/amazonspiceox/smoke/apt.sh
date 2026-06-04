@@ -30,6 +30,8 @@ fi
 
 echo "[apt-smoke] /etc/resolv.conf"
 cat /etc/resolv.conf || true
+echo "[apt-smoke] /etc/nsswitch.conf"
+cat /etc/nsswitch.conf || true
 echo "[apt-smoke] ip address"
 ip addr show 2>/dev/null || true
 echo "[apt-smoke] ip route"
@@ -38,10 +40,18 @@ echo "[apt-smoke] apt sources"
 cat /etc/apt/sources.list || true
 sync 2>/dev/null || true
 
+echo "[apt-smoke] getent hosts deb.debian.org"
+if ! getent hosts deb.debian.org; then
+    echo "[apt-smoke] DNS lookup failed"
+    mark_status "AMAZONSPICEOX_APT_SMOKE_DNS_FAILED"
+    exit 1
+fi
+
 updated=0
 for attempt in 1 2 3; do
     echo "[apt-smoke] apt-get update attempt $attempt"
     if apt-get \
+        -o APT::Update::Error-Mode=any \
         -o Acquire::Retries=1 \
         -o Acquire::http::Timeout=20 \
         update; then
@@ -61,6 +71,8 @@ fi
 
 apt-cache policy ca-certificates
 sync 2>/dev/null || true
+
+apt-get clean
 
 if ! apt-get \
     -o Acquire::Retries=1 \
