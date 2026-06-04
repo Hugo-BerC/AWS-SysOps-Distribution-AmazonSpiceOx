@@ -155,6 +155,8 @@ help:
 	@echo "  make run        Boot in QEMU"
 	@echo "  make smoke      Boot briefly and check AMAZONSPICEOX_PHASE3_BOOT_OK"
 	@echo "  make smoke-apt  Boot briefly, run apt validation inside the guest, and check AMAZONSPICEOX_APT_SMOKE_OK"
+	@echo "  make smoke-only      Run the boot smoke against existing artifacts only"
+	@echo "  make smoke-apt-only  Run the apt smoke against existing artifacts only"
 	@echo "  make clean      Remove generated build/output files"
 	@echo "  make distclean  Also remove downloaded tarballs"
 	@echo ""
@@ -456,11 +458,25 @@ run: all
 
 .PHONY: smoke
 smoke: all
-	sh scripts/run-smoke.sh boot "$(SMOKE_TIMEOUT)" "AMAZONSPICEOX_PHASE3_BOOT_OK" "$(QEMU_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh boot "$(SMOKE_TIMEOUT)" "AMAZONSPICEOX_PHASE3_BOOT_OK" "$(QEMU_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: smoke-apt
 smoke-apt: all
-	sh scripts/run-smoke.sh apt "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_APT_SMOKE_OK" "$(QEMU_APT_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh apt "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_APT_SMOKE_OK" "$(QEMU_APT_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-only
+smoke-only:
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh boot "$(SMOKE_TIMEOUT)" "AMAZONSPICEOX_PHASE3_BOOT_OK" "$(QEMU_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-apt-only
+smoke-apt-only:
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh apt "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_APT_SMOKE_OK" "$(QEMU_APT_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: docker-build docker-shell docker-run
 docker-build:
