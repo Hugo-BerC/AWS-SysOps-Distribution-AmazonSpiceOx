@@ -125,3 +125,11 @@ Candidates:
 - eksctl
 - cloud-init
 - observability tools
+
+Current first cut:
+
+- `ASOX_PROFILES="base aws"` for a lightweight AWS-oriented guest
+- `ASOX_PROFILES="base aws awscli"` for an opt-in AWS CLI layer
+- `make smoke-awscli` / `make smoke-awscli-only` to validate the AWS CLI
+- the `awscli` layer is installed post-bootstrap with `apt` rather than through
+  `debootstrap --include`

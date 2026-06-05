@@ -6,6 +6,14 @@ All notable progress in AmazonSpiceOx is tracked here.
 
 Implemented:
 
+- `awscli` promoted from "manifest only" to a first-class optional profile
+  component.
+- `awscli` now installs post-bootstrap with `apt` instead of through
+  `debootstrap --include`.
+- `make smoke-awscli` and `make smoke-awscli-only` to validate guest `awscli`
+  behavior independently.
+- `make run-only` to boot the current artifacts without implicitly rebuilding
+  the rootfs or ext4 image.
 - `make smoke-net` and `make smoke-net-only` to validate guest networking and
   DNS independently from `apt`.
 - `make smoke-apt` to boot the guest and validate `apt` from inside

@@ -31,6 +31,7 @@ LEGACY_ROOTFS_STAMP := $(LEGACY_ROOTFS_DIR)/.stamp
 INITRAMFS_ROOTFS_DIR := $(BUILD_DIR)/initramfs-rootfs
 INITRAMFS_ROOTFS_STAMP := $(INITRAMFS_ROOTFS_DIR)/.stamp
 MANIFEST_DIR := manifests
+POST_MANIFEST_DIR := manifests-post
 DEBIAN_CONFIG_DIR := configs/debian
 DEBIAN_SOURCES_LIST := $(DEBIAN_CONFIG_DIR)/sources.list
 DEB_CACHE_DIR := $(DL_DIR)/debian/$(DEBIAN_SUITE)/$(DEBIAN_ARCH)/packages
@@ -108,9 +109,12 @@ ZLIB_SMOKE_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/zlib-smoke
 OPENSSL_SMOKE_BIN := $(OUT_DIR)/openssl-smoke
 OPENSSL_SMOKE_ROOTFS := $(ROOTFS_DIR)/usr/local/bin/openssl-smoke
 ALL_MANIFESTS := $(wildcard $(MANIFEST_DIR)/*.txt)
+ALL_POST_MANIFESTS := $(wildcard $(POST_MANIFEST_DIR)/*.txt)
 DEBIAN_MANIFESTS ?= $(foreach profile,$(NORMALIZED_PROFILES),$(MANIFEST_DIR)/$(profile).txt)
+DEBIAN_POST_MANIFESTS ?= $(foreach profile,$(NORMALIZED_PROFILES),$(wildcard $(POST_MANIFEST_DIR)/$(profile).txt))
 QEMU_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-$(ACTIVE_PROFILE_ID).log
 QEMU_NET_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-net-$(ACTIVE_PROFILE_ID).log
+QEMU_AWSCLI_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-awscli-$(ACTIVE_PROFILE_ID).log
 QEMU_APT_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-apt-$(ACTIVE_PROFILE_ID).log
 
 JOBS ?= $(shell nproc 2>/dev/null || echo 2)
@@ -154,11 +158,14 @@ help:
 	@echo "  make initramfs  Package the generated rootfs as initramfs"
 	@echo "  make root-disk  Build the ext4 persistent root filesystem image"
 	@echo "  make run        Boot in QEMU"
+	@echo "  make run-only   Boot the current artifacts in QEMU without rebuilding"
 	@echo "  make smoke      Boot briefly and check AMAZONSPICEOX_PHASE3_BOOT_OK"
 	@echo "  make smoke-net  Boot briefly, validate basic guest networking, and check AMAZONSPICEOX_NETWORK_SMOKE_OK"
+	@echo "  make smoke-awscli Boot briefly, validate guest awscli, and check AMAZONSPICEOX_AWSCLI_SMOKE_OK"
 	@echo "  make smoke-apt  Boot briefly, run apt validation inside the guest, and check AMAZONSPICEOX_APT_SMOKE_OK"
 	@echo "  make smoke-only      Run the boot smoke against existing artifacts only"
 	@echo "  make smoke-net-only  Run the guest network smoke against existing artifacts only"
+	@echo "  make smoke-awscli-only Run the guest awscli smoke against existing artifacts only"
 	@echo "  make smoke-apt-only  Run the apt smoke against existing artifacts only"
 	@echo "  make clean      Remove generated build/output files"
 	@echo "  make distclean  Also remove downloaded tarballs"
@@ -172,6 +179,7 @@ profile-info:
 	@echo "Active profiles: $(NORMALIZED_PROFILES)"
 	@echo "Profile name: $(ACTIVE_PROFILE_NAME)"
 	@echo "Manifests: $(DEBIAN_MANIFESTS)"
+	@echo "Post manifests: $(DEBIAN_POST_MANIFESTS)"
 	@echo "Overlays: $(ROOTFS_OVERLAY_DIRS)"
 	@echo "Rootfs dir: $(ROOTFS_DIR)"
 	@echo "Rootfs image: $(ROOTFS_IMAGE)"
@@ -180,8 +188,12 @@ profile-info:
 deps:
 	sh scripts/check-tools.sh
 
+.PHONY: check-build-path
+check-build-path:
+	sh scripts/check-build-path.sh
+
 .PHONY: all
-all: $(KERNEL_IMAGE) $(INITRAMFS) $(ROOTFS_IMAGE)
+all: check-build-path $(KERNEL_IMAGE) $(INITRAMFS) $(ROOTFS_IMAGE)
 
 $(DL_DIR) $(SRC_DIR) $(OUT_DIR) $(TOOLCHAIN_SOURCES_DIR) $(TOOLCHAIN_BUILD_DIR) $(TOOLCHAIN_TOOLS_DIR) $(TOOLCHAIN_SYSROOT):
 	mkdir -p $@
@@ -362,7 +374,7 @@ openssl-smoke-rootfs: $(ROOTFS_STAMP) $(OPENSSL_SMOKE_BIN) scripts/build-root-di
 	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$(ROOTFS_IMAGE)" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
 
 .PHONY: fetch
-fetch: $(DEB_FETCH_STAMP)
+fetch: check-build-path $(DEB_FETCH_STAMP)
 
 $(DEB_FETCH_STAMP): $(DEBIAN_SOURCES_LIST) $(ALL_MANIFESTS) scripts/fetch-packages.sh | $(DL_DIR)
 	sh scripts/fetch-packages.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(abspath $(DEB_CACHE_DIR))" $(DEBIAN_MANIFESTS)
@@ -423,17 +435,17 @@ $(BUSYBOX_SRC)/.config: $(BUSYBOX_EXTRACT_STAMP) Makefile scripts/kconfig-set.sh
 	yes "" | $(MAKE) -C $(BUSYBOX_SRC) oldconfig
 
 .PHONY: legacy-rootfs
-legacy-rootfs: $(LEGACY_ROOTFS_STAMP)
+legacy-rootfs: check-build-path $(LEGACY_ROOTFS_STAMP)
 
 $(LEGACY_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs-legacy.sh
 	sh scripts/build-rootfs-legacy.sh "$(BUSYBOX_SRC)" "$(ROOTFS_TEMPLATE)" "$(INIT_FILE)" "$(abspath $(LEGACY_ROOTFS_DIR))" "$(BUSYBOX_CC)" "$(JOBS)" "$(abspath $(KERNEL_HEADERS_DIR))"
 	touch "$@"
 
 .PHONY: rootfs
-rootfs: $(ROOTFS_STAMP)
+rootfs: check-build-path $(ROOTFS_STAMP)
 
-$(ROOTFS_STAMP): $(DEB_FETCH_STAMP) $(INIT_FILE) $(ROOTFS_FILES) $(DEBIAN_SOURCES_LIST) scripts/build-rootfs.sh
-	sh scripts/build-rootfs.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(DEBIAN_SOURCES_LIST)" "$(ROOTFS_OVERLAY_DIRS_COLON)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(abspath $(DEB_CACHE_DIR))" "$(ACTIVE_PROFILE_NAME)" $(DEBIAN_MANIFESTS)
+$(ROOTFS_STAMP): $(DEB_FETCH_STAMP) $(INIT_FILE) $(ROOTFS_FILES) $(DEBIAN_SOURCES_LIST) $(ALL_POST_MANIFESTS) scripts/build-rootfs.sh
+	DEBIAN_POST_MANIFESTS="$(DEBIAN_POST_MANIFESTS)" sh scripts/build-rootfs.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(DEBIAN_SOURCES_LIST)" "$(ROOTFS_OVERLAY_DIRS_COLON)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(abspath $(DEB_CACHE_DIR))" "$(ACTIVE_PROFILE_NAME)" $(DEBIAN_MANIFESTS)
 	touch "$@"
 
 $(INITRAMFS_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs-legacy.sh
@@ -441,13 +453,13 @@ $(INITRAMFS_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/
 	touch "$@"
 
 .PHONY: initramfs
-initramfs: $(INITRAMFS)
+initramfs: check-build-path $(INITRAMFS)
 
 $(INITRAMFS): $(INITRAMFS_ROOTFS_STAMP) scripts/build-initramfs.sh | $(OUT_DIR)
 	sh scripts/build-initramfs.sh "$(INITRAMFS_ROOTFS_DIR)" "$@"
 
 .PHONY: root-disk
-root-disk: $(ROOTFS_IMAGE)
+root-disk: check-build-path $(ROOTFS_IMAGE)
 
 .PHONY: image
 image: root-disk
@@ -459,6 +471,13 @@ $(ROOTFS_IMAGE): $(ROOTFS_STAMP) scripts/build-root-disk.sh | $(OUT_DIR)
 run: all
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
+.PHONY: run-only
+run-only: check-build-path
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
 .PHONY: smoke
 smoke: all
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh boot "$(SMOKE_TIMEOUT)" "AMAZONSPICEOX_PHASE3_BOOT_OK" "$(QEMU_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
@@ -467,26 +486,37 @@ smoke: all
 smoke-net: all
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh network "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_NETWORK_SMOKE_OK" "$(QEMU_NET_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
+.PHONY: smoke-awscli
+smoke-awscli: all
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh awscli "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_AWSCLI_SMOKE_OK" "$(QEMU_AWSCLI_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
 .PHONY: smoke-apt
 smoke-apt: all
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh apt "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_APT_SMOKE_OK" "$(QEMU_APT_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: smoke-only
-smoke-only:
+smoke-only: check-build-path
 	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
 	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
 	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh boot "$(SMOKE_TIMEOUT)" "AMAZONSPICEOX_PHASE3_BOOT_OK" "$(QEMU_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: smoke-net-only
-smoke-net-only:
+smoke-net-only: check-build-path
 	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
 	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
 	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh network "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_NETWORK_SMOKE_OK" "$(QEMU_NET_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
+.PHONY: smoke-awscli-only
+smoke-awscli-only: check-build-path
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh awscli "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_AWSCLI_SMOKE_OK" "$(QEMU_AWSCLI_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
 .PHONY: smoke-apt-only
-smoke-apt-only:
+smoke-apt-only: check-build-path
 	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
 	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
 	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }

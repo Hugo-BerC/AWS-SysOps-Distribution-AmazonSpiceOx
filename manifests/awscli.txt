@@ -1,1 +1,3 @@
-awscli
+# The awscli profile is installed after the base Debian bootstrap, not through
+# debootstrap --include. Keeping this manifest empty avoids a known trixie
+# bootstrap failure around python3-cryptography and cffi virtual dependencies.

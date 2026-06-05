@@ -4,7 +4,7 @@
 # This script is PID 1 only briefly. Its job is to find the persistent root
 # disk, mount it, and switch into the real init at /sbin/init.
 
-export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH=/usr/local/sbin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin
 export PS1='initramfs:\w# '
 export HOME=/root
 export TERM=linux

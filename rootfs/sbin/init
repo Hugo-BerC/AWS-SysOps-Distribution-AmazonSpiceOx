@@ -4,7 +4,7 @@
 # This is the real PID 1 after initramfs mounts the persistent rootfs and runs
 # switch_root. It stays intentionally small and readable.
 
-export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH=/usr/local/sbin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin
 export PS1='arrakis:\w# '
 export HOME=/root
 export TERM=linux
@@ -27,7 +27,7 @@ log() {
 
 set_smoke_status() {
     case "$SMOKE_MODE" in
-        apt|net|network)
+        apt|net|network|awscli)
             ;;
         *)
             return 0
@@ -58,6 +58,9 @@ configure_smoke_paths() {
     case "$SMOKE_MODE" in
         net|network)
             SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/network.status"
+            ;;
+        awscli)
+            SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/awscli.status"
             ;;
         apt)
             SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/apt.status"
@@ -196,6 +199,24 @@ run_requested_smoke() {
     case "$SMOKE_MODE" in
         ""|none)
             return 0
+            ;;
+        awscli)
+            SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/awscli.status"
+            log "running requested awscli smoke"
+            set_smoke_status "AMAZONSPICEOX_AWSCLI_INIT_LAUNCHING_SCRIPT"
+            if [ ! -x /usr/local/lib/amazonspiceox/smoke/awscli.sh ]; then
+                set_smoke_status "AMAZONSPICEOX_AWSCLI_INIT_SCRIPT_MISSING"
+                log "awscli smoke script is missing or not executable"
+                return 1
+            fi
+            if /usr/local/lib/amazonspiceox/smoke/awscli.sh; then
+                log "awscli smoke completed successfully"
+            else
+                echo "AMAZONSPICEOX_AWSCLI_SMOKE_FAIL"
+                printf '%s\n' "AMAZONSPICEOX_AWSCLI_SMOKE_FAIL" > /var/lib/amazonspiceox/smoke/awscli.status 2>/dev/null || true
+                sync 2>/dev/null || true
+                log "awscli smoke failed"
+            fi
             ;;
         net|network)
             SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/network.status"

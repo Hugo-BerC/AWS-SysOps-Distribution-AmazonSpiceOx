@@ -151,6 +151,9 @@ case "$mode" in
     boot)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw}"
         ;;
+    awscli)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=awscli"
+        ;;
     net|network)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=network"
         ;;
@@ -185,13 +188,17 @@ fi
 
 marker_found=0
 
-if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ]; then
+if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ] || [ "$mode" = "awscli" ]; then
     repair_guest_fs "$rootfs_image"
 
     if [ "$mode" = "apt" ]; then
         guest_status_path="/var/lib/amazonspiceox/smoke/apt.status"
         guest_log_path="/var/log/apt-smoke.log"
         guest_label="apt"
+    elif [ "$mode" = "awscli" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/awscli.status"
+        guest_log_path="/var/log/awscli-smoke.log"
+        guest_label="awscli"
     else
         guest_status_path="/var/lib/amazonspiceox/smoke/network.status"
         guest_log_path="/var/log/network-smoke.log"
