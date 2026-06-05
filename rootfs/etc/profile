@@ -1,4 +1,4 @@
-export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH=/usr/local/sbin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin
 export PS1='arrakis:\w# '
 
 if [ -d /etc/profile.d ]; then

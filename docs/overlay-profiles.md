@@ -8,6 +8,7 @@ Current profile components:
 - `base`
 - `debug`
 - `aws`
+- `awscli`
 
 `base` is always included automatically.
 
@@ -32,6 +33,12 @@ sudo -E make rootfs ASOX_PROFILES="base aws"
 make run ASOX_PROFILES="base aws"
 ```
 
+```sh
+make fetch ASOX_PROFILES="base aws awscli"
+sudo -E make rootfs ASOX_PROFILES="base aws awscli"
+make run ASOX_PROFILES="base aws awscli"
+```
+
 ## Current Layout
 
 ```text
@@ -47,6 +54,7 @@ manifests/base.txt
 manifests/debug.txt
 manifests/aws.txt
 manifests/awscli.txt
+manifests-post/awscli.txt
 ```
 
 ## Output Paths
@@ -79,7 +87,10 @@ Inside the guest, the active profile is recorded in:
   `vim-tiny`
 - `aws`: first AWS-oriented package slice, including `cloud-guest-utils`,
   `jq`, and `openssh-client`
-- `awscli.txt`: optional add-on manifest for `awscli`
+- `awscli`: optional add-on profile for `awscli`
 
 `cloud-init` remains a later Phase VI candidate rather than part of this first
 AWS profile cut.
+
+The `awscli` profile is installed after the base Debian bootstrap rather than
+through `debootstrap --include`.

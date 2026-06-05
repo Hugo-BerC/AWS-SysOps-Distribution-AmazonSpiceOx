@@ -112,6 +112,31 @@ repair_guest_fs() {
     e2fsck -fy "$image_path" >/dev/null 2>&1 || true
 }
 
+show_guest_smoke_failure() {
+    image_path="$1"
+    status_path="$2"
+    log_file_path="$3"
+    marker_text="$4"
+    label="$5"
+    status_value="$6"
+
+    echo "smoke: guest $label status file did not contain marker: $marker_text" >&2
+    echo "smoke: guest $label status content:" >&2
+    printf '%s\n' "$status_value" >&2
+    echo "smoke: guest /var/lib/amazonspiceox directory:" >&2
+    list_guest_dir "$image_path" /var/lib/amazonspiceox >&2 || true
+    echo "smoke: guest /var/lib/amazonspiceox/smoke directory:" >&2
+    list_guest_dir "$image_path" /var/lib/amazonspiceox/smoke >&2 || true
+    echo "smoke: guest persistent root marker:" >&2
+    read_guest_file "$image_path" /var/lib/amazonspiceox/rootfs-state >&2 || true
+    echo "smoke: guest /var/log directory:" >&2
+    list_guest_dir "$image_path" /var/log >&2 || true
+    echo "smoke: guest boot log content:" >&2
+    read_guest_file "$image_path" /var/log/boot.log >&2 || true
+    echo "smoke: guest $label log content:" >&2
+    read_guest_file "$image_path" "$log_file_path" >&2 || true
+}
+
 mkdir -p "$(dirname "$log_path")"
 
 actual_log_path="$log_path"
@@ -125,6 +150,12 @@ diag_log_path="$(mktemp)"
 case "$mode" in
     boot)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw}"
+        ;;
+    awscli)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=awscli"
+        ;;
+    net|network)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=network"
         ;;
     apt)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=apt"
@@ -157,28 +188,29 @@ fi
 
 marker_found=0
 
-if [ "$mode" = "apt" ]; then
+if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ] || [ "$mode" = "awscli" ]; then
     repair_guest_fs "$rootfs_image"
-    guest_status="$(read_guest_file "$rootfs_image" /var/lib/amazonspiceox/smoke/apt.status || true)"
+
+    if [ "$mode" = "apt" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/apt.status"
+        guest_log_path="/var/log/apt-smoke.log"
+        guest_label="apt"
+    elif [ "$mode" = "awscli" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/awscli.status"
+        guest_log_path="/var/log/awscli-smoke.log"
+        guest_label="awscli"
+    else
+        guest_status_path="/var/lib/amazonspiceox/smoke/network.status"
+        guest_log_path="/var/log/network-smoke.log"
+        guest_label="network"
+    fi
+
+    guest_status="$(read_guest_file "$rootfs_image" "$guest_status_path" || true)"
 
     if printf '%s\n' "$guest_status" | grep -q "$marker"; then
         marker_found=1
     else
-        echo "smoke: guest apt status file did not contain marker: $marker" >&2
-        echo "smoke: guest apt status content:" >&2
-        printf '%s\n' "$guest_status" >&2
-        echo "smoke: guest /var/lib/amazonspiceox directory:" >&2
-        list_guest_dir "$rootfs_image" /var/lib/amazonspiceox >&2 || true
-        echo "smoke: guest /var/lib/amazonspiceox/smoke directory:" >&2
-        list_guest_dir "$rootfs_image" /var/lib/amazonspiceox/smoke >&2 || true
-        echo "smoke: guest persistent root marker:" >&2
-        read_guest_file "$rootfs_image" /var/lib/amazonspiceox/rootfs-state >&2 || true
-        echo "smoke: guest /var/log directory:" >&2
-        list_guest_dir "$rootfs_image" /var/log >&2 || true
-        echo "smoke: guest boot log content:" >&2
-        read_guest_file "$rootfs_image" /var/log/boot.log >&2 || true
-        echo "smoke: guest apt log content:" >&2
-        read_guest_file "$rootfs_image" /var/log/apt-smoke.log >&2 || true
+        show_guest_smoke_failure "$rootfs_image" "$guest_status_path" "$guest_log_path" "$marker" "$guest_label" "$guest_status"
     fi
 else
     if grep -q "$marker" "$actual_log_path"; then

@@ -197,7 +197,10 @@ make rootfs
 make initramfs
 make image
 make run
+make run-only
 make smoke
+make smoke-net
+make smoke-awscli
 make smoke-apt
 ```
 
@@ -205,6 +208,11 @@ Useful extras:
 
 ```text
 make profile-info
+make run-only
+make smoke-only
+make smoke-net-only
+make smoke-awscli-only
+make smoke-apt-only
 make legacy-rootfs
 make clean
 make distclean
@@ -212,6 +220,11 @@ make distclean
 
 `legacy-rootfs` keeps the older BusyBox-compiled rootfs flow around as
 educational reference. It is also still useful for the tiny initramfs build.
+
+`run-only`, `smoke-only`, `smoke-net-only`, and `smoke-apt-only` reuse the
+current artifacts without rebuilding the rootfs or ext4 image. They are useful
+after a `sudo -E make rootfs` / `sudo -E make image` cycle when you only want
+to re-run QEMU-side validation.
 
 ## Profiles and Manifests
 
@@ -244,6 +257,12 @@ sudo -E make rootfs ASOX_PROFILES="base aws"
 make run ASOX_PROFILES="base aws"
 ```
 
+```bash
+make fetch ASOX_PROFILES="base aws awscli"
+sudo -E make rootfs ASOX_PROFILES="base aws awscli"
+make run ASOX_PROFILES="base aws awscli"
+```
+
 Package names are standard Debian package names.
 `base` is always included automatically.
 The current `aws` profile is intentionally lightweight and keeps the first
@@ -251,22 +270,38 @@ Debian bootstrap focused on packages that behave well under `debootstrap`.
 `awscli` currently lives in its own optional manifest:
 
 ```text
-manifests/awscli.txt
+manifests-post/awscli.txt
 ```
 
 That means:
 
 - `ASOX_PROFILES="base aws"` gives you the light AWS-oriented slice
-- `awscli` is opt-in for now
+- `ASOX_PROFILES="base aws awscli"` adds the AWS CLI on top
 - `cloud-init` stays as a later Phase VI candidate
 
 Example with the optional AWS CLI manifest:
 
 ```bash
-make fetch DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt manifests/awscli.txt"
-sudo -E make rootfs DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt manifests/awscli.txt"
-make run DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt manifests/awscli.txt"
+make fetch DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt"
+sudo -E make rootfs DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt" DEBIAN_POST_MANIFESTS="manifests-post/awscli.txt"
+make run DEBIAN_MANIFESTS="manifests/base.txt manifests/aws.txt" DEBIAN_POST_MANIFESTS="manifests-post/awscli.txt"
 ```
+
+That optional manifest flow still works, but the preferred path is now the
+profile form:
+
+```bash
+make fetch ASOX_PROFILES="base aws awscli"
+sudo -E make rootfs ASOX_PROFILES="base aws awscli"
+make smoke-awscli-only ASOX_PROFILES="base aws awscli"
+```
+
+Implementation detail:
+
+- `awscli` is installed after the base Debian bootstrap with `apt`, not through
+  `debootstrap --include`
+- this avoids a current `trixie` bootstrap failure around `python3-cryptography`
+  and versioned `cffi` virtual dependencies
 
 The active profile also changes the generated rootfs and image paths. For
 example:

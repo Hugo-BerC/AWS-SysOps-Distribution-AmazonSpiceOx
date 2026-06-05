@@ -6,11 +6,25 @@ All notable progress in AmazonSpiceOx is tracked here.
 
 Implemented:
 
+- `awscli` promoted from "manifest only" to a first-class optional profile
+  component.
+- `awscli` now installs post-bootstrap with `apt` instead of through
+  `debootstrap --include`.
+- `make smoke-awscli` and `make smoke-awscli-only` to validate guest `awscli`
+  behavior independently.
+- `make run-only` to boot the current artifacts without implicitly rebuilding
+  the rootfs or ext4 image.
+- `make smoke-net` and `make smoke-net-only` to validate guest networking and
+  DNS independently from `apt`.
 - `make smoke-apt` to boot the guest and validate `apt` from inside
   AmazonSpiceOx.
 - kernel command line support for `asox.smoke=apt`.
+- kernel command line support for `asox.smoke=network`.
 - in-guest `apt` smoke script under
   `rootfs/usr/local/lib/amazonspiceox/smoke/apt.sh`.
+- in-guest network smoke script under
+  `rootfs/usr/local/lib/amazonspiceox/smoke/network.sh`.
+- `asox-netcheck` helper inside the guest for interactive network debugging.
 - CI now runs the new guest apt smoke after the normal boot smoke.
 - the initial `aws` profile was trimmed to keep `cloud-init` as a later
   Phase VI candidate instead of part of the first profile slice.

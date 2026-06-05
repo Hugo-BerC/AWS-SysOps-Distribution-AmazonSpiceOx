@@ -83,6 +83,8 @@ Done when:
 
 Validation:
 
+- `make smoke-net` now boots the guest, validates basic networking and DNS from
+  inside AmazonSpiceOx, and checks for `AMAZONSPICEOX_NETWORK_SMOKE_OK`.
 - `make smoke-apt` now boots the guest, runs an `apt` validation pass from
   inside AmazonSpiceOx, and checks for `AMAZONSPICEOX_APT_SMOKE_OK`.
 
@@ -123,3 +125,11 @@ Candidates:
 - eksctl
 - cloud-init
 - observability tools
+
+Current first cut:
+
+- `ASOX_PROFILES="base aws"` for a lightweight AWS-oriented guest
+- `ASOX_PROFILES="base aws awscli"` for an opt-in AWS CLI layer
+- `make smoke-awscli` / `make smoke-awscli-only` to validate the AWS CLI
+- the `awscli` layer is installed post-bootstrap with `apt` rather than through
+  `debootstrap --include`
