@@ -26,7 +26,13 @@ log() {
 }
 
 set_smoke_status() {
-    [ "$SMOKE_MODE" = "apt" ] || return 0
+    case "$SMOKE_MODE" in
+        apt|net|network)
+            ;;
+        *)
+            return 0
+            ;;
+    esac
     mkdir -p "$SMOKE_STATE_DIR"
     printf '%s\n' "$1" > "$SMOKE_STATUS_FILE" 2>/dev/null || true
     sync 2>/dev/null || true
@@ -46,6 +52,17 @@ read_boot_cmdline() {
                 ;;
         esac
     done
+}
+
+configure_smoke_paths() {
+    case "$SMOKE_MODE" in
+        net|network)
+            SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/network.status"
+            ;;
+        apt)
+            SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/apt.status"
+            ;;
+    esac
 }
 
 emergency_shell() {
@@ -180,7 +197,26 @@ run_requested_smoke() {
         ""|none)
             return 0
             ;;
+        net|network)
+            SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/network.status"
+            log "running requested network smoke"
+            set_smoke_status "AMAZONSPICEOX_NETWORK_INIT_LAUNCHING_SCRIPT"
+            if [ ! -x /usr/local/lib/amazonspiceox/smoke/network.sh ]; then
+                set_smoke_status "AMAZONSPICEOX_NETWORK_INIT_SCRIPT_MISSING"
+                log "network smoke script is missing or not executable"
+                return 1
+            fi
+            if /usr/local/lib/amazonspiceox/smoke/network.sh; then
+                log "network smoke completed successfully"
+            else
+                echo "AMAZONSPICEOX_NETWORK_SMOKE_FAIL"
+                printf '%s\n' "AMAZONSPICEOX_NETWORK_SMOKE_FAIL" > /var/lib/amazonspiceox/smoke/network.status 2>/dev/null || true
+                sync 2>/dev/null || true
+                log "network smoke failed"
+            fi
+            ;;
         apt)
+            SMOKE_STATUS_FILE="$SMOKE_STATE_DIR/apt.status"
             log "running requested apt smoke"
             set_smoke_status "AMAZONSPICEOX_APT_INIT_LAUNCHING_SCRIPT"
             if [ ! -x /usr/local/lib/amazonspiceox/smoke/apt.sh ]; then
@@ -262,12 +298,13 @@ load_profile
 mount_once proc /proc
 mount_once sysfs /sys
 read_boot_cmdline
-set_smoke_status "AMAZONSPICEOX_APT_INIT_STAGE2_READY"
+configure_smoke_paths
+set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_STAGE2_READY"
 setup_devices
 setup_hostname
-set_smoke_status "AMAZONSPICEOX_APT_INIT_HOSTNAME_READY"
+set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_HOSTNAME_READY"
 setup_network
-set_smoke_status "AMAZONSPICEOX_APT_INIT_NETWORK_READY"
+set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_NETWORK_READY"
 setup_resolver
 record_persistent_boot
 run_requested_smoke

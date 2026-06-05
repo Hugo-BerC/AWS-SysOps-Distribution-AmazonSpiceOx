@@ -1,0 +1,45 @@
+#!/bin/sh
+set -eu
+
+echo "[asox-netcheck] hostname"
+hostname || true
+echo
+
+echo "[asox-netcheck] eth0"
+ip addr show dev eth0 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] routes"
+ip route show 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] resolv.conf"
+cat /etc/resolv.conf 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] nsswitch.conf"
+cat /etc/nsswitch.conf 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] ifup log"
+cat /tmp/ifup-eth0.log 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] dhclient log"
+cat /tmp/dhclient-eth0.log 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] getent hosts deb.debian.org"
+getent hosts deb.debian.org 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] ping 10.0.2.2"
+ping -c 1 10.0.2.2 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] ping 1.1.1.1"
+ping -c 1 1.1.1.1 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] ping deb.debian.org"
+ping -c 1 deb.debian.org 2>/dev/null || true

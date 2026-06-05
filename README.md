@@ -198,6 +198,7 @@ make initramfs
 make image
 make run
 make smoke
+make smoke-net
 make smoke-apt
 ```
 
@@ -205,6 +206,9 @@ Useful extras:
 
 ```text
 make profile-info
+make smoke-only
+make smoke-net-only
+make smoke-apt-only
 make legacy-rootfs
 make clean
 make distclean

@@ -83,6 +83,8 @@ Done when:
 
 Validation:
 
+- `make smoke-net` now boots the guest, validates basic networking and DNS from
+  inside AmazonSpiceOx, and checks for `AMAZONSPICEOX_NETWORK_SMOKE_OK`.
 - `make smoke-apt` now boots the guest, runs an `apt` validation pass from
   inside AmazonSpiceOx, and checks for `AMAZONSPICEOX_APT_SMOKE_OK`.
 

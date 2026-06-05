@@ -125,6 +125,14 @@ if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/apt.sh" ]; then
     chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/apt.sh"
 fi
 
+if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/network.sh" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/network.sh"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/asox-netcheck" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-netcheck"
+fi
+
 chmod 0700 "$rootfs_dir/root"
 chmod 1777 "$rootfs_dir/tmp"
 : > "$rootfs_dir/var/log/boot.log"
