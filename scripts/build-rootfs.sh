@@ -12,6 +12,8 @@ cache_dir="${8:?cache directory required}"
 profile_name="${9:?profile name required}"
 shift 9
 post_manifests="${DEBIAN_POST_MANIFESTS:-}"
+external_deb_packages="${EXTERNAL_DEB_PACKAGES:-}"
+external_rootfs_files="${EXTERNAL_ROOTFS_FILES:-}"
 
 apply_overlay() {
     src_root="$1"
@@ -111,6 +113,81 @@ install_post_packages() {
     trap - EXIT INT TERM
 }
 
+install_external_debs() {
+    root="$1"
+    deb_packages="$2"
+
+    set -- $deb_packages
+    [ "$#" -gt 0 ] || return 0
+
+    external_cache_dir="/var/cache/amazonspiceox/external"
+    mkdir -p "$root$external_cache_dir"
+
+    for deb_package in "$@"; do
+        if [ ! -f "$deb_package" ]; then
+            echo "error: external deb package not found: $deb_package" >&2
+            exit 1
+        fi
+        cp -f "$deb_package" "$root$external_cache_dir/"
+    done
+
+    echo "Installing external deb packages into $root"
+    prepare_chroot_network "$root"
+    trap 'cleanup_chroot_network "$root"' EXIT INT TERM
+
+    for deb_package in "$@"; do
+        deb_basename="$(basename "$deb_package")"
+        chroot "$root" /usr/bin/env DEBIAN_FRONTEND=noninteractive \
+            dpkg -i "$external_cache_dir/$deb_basename" || \
+            chroot "$root" /usr/bin/env DEBIAN_FRONTEND=noninteractive \
+                apt-get install -y --no-install-recommends -f
+    done
+
+    cleanup_chroot_network "$root"
+    trap - EXIT INT TERM
+}
+
+install_external_rootfs_files() {
+    root="$1"
+    file_specs="$2"
+
+    [ -n "$file_specs" ] || return 0
+
+    trim_field() {
+        printf '%s' "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+    }
+
+    old_ifs="$IFS"
+    IFS=';'
+
+    for file_spec in $file_specs; do
+        file_spec="$(trim_field "$file_spec")"
+        [ -n "$file_spec" ] || continue
+        IFS=':'
+        set -- $file_spec
+        IFS=';'
+
+        src_path="$(trim_field "${1:-}")"
+        dest_path="$(trim_field "${2:-}")"
+        file_mode="$(trim_field "${3:-0755}")"
+
+        if [ -z "$src_path" ] || [ -z "$dest_path" ]; then
+            echo "error: malformed EXTERNAL_ROOTFS_FILES entry: $file_spec" >&2
+            exit 1
+        fi
+
+        if [ ! -f "$src_path" ]; then
+            echo "error: external rootfs file not found: $src_path" >&2
+            exit 1
+        fi
+
+        mkdir -p "$root$(dirname "$dest_path")"
+        install -m "$file_mode" "$src_path" "$root$dest_path"
+    done
+
+    IFS="$old_ifs"
+}
+
 if [ "$#" -eq 0 ]; then
     echo "error: at least one manifest is required" >&2
     exit 1
@@ -168,7 +245,9 @@ mkdir -p "$rootfs_dir/etc/apt"
 cp "$sources_list" "$rootfs_dir/etc/apt/sources.list"
 printf '%s\n' "$profile_name" > "$rootfs_dir/etc/amazonspiceox-profile"
 
+install_external_rootfs_files "$rootfs_dir" "$external_rootfs_files"
 install_post_packages "$rootfs_dir" "$sources_list" "$post_manifests"
+install_external_debs "$rootfs_dir" "$external_deb_packages"
 
 apply_overlays "$overlay_dirs_spec" "$rootfs_dir"
 
@@ -190,8 +269,60 @@ if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/awscli.sh" ]; then
     chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/awscli.sh"
 fi
 
+if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/ssm.sh" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/ssm.sh"
+fi
+
+if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/terraform.sh" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/terraform.sh"
+fi
+
+if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/kubectl.sh" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/kubectl.sh"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/terraform" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/terraform"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/kubectl" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/kubectl"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/asox-kubeconfig" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-kubeconfig"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/kubeconfig" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/kubeconfig"
+fi
+
 if [ -f "$rootfs_dir/usr/local/bin/asox-netcheck" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-netcheck"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/asox-xsession" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-xsession"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/gui-run" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/gui-run"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/chrome" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/chrome"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/python-gui" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/python-gui"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/xpra-info" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/xpra-info"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/gui-doctor" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/gui-doctor"
 fi
 
 chmod 0700 "$rootfs_dir/root"

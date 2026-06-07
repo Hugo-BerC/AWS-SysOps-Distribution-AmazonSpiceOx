@@ -13,6 +13,10 @@ The current mirror-based implementation uses Debian Stable packages from the
 public repositories configured in
 [configs/debian/sources.list](../configs/debian/sources.list).
 
+The main exception today is the optional `ssm` profile, which fetches the AWS
+Session Manager plugin from the official AWS Linux plugin URL, verifies its
+signature, and installs it after the Debian bootstrap.
+
 Main pieces:
 
 - [manifests/base.txt](../manifests/base.txt)

@@ -2,6 +2,129 @@
 
 All notable progress in AmazonSpiceOx is tracked here.
 
+## 2026-06-05 - Minimal GUI Guest Layer
+
+Implemented:
+
+- the `gui` profile as an opt-in graphical guest layer
+- `manifests/gui.txt` with Chromium, X11, `openbox`, and Python desktop
+  runtime packages
+- `make run-gui` and `make run-gui-only` for QEMU boots with a graphical
+  window
+- `gui-run` as a helper that launches a one-shot X11 session for a guest
+  command
+- `chrome` as a guest-facing wrapper around Debian's Chromium package
+- `python-gui` as a guest-facing launcher for desktop Python scripts and quick
+  Tkinter validation
+
+Notes:
+
+- this is intentionally not a full desktop environment
+- the goal is to open a browser and desktop Python apps inside the VM while
+  keeping the distro small and focused
+
+## 2026-06-05 - Xpra Cross-Platform App Forwarding
+
+Implemented:
+
+- the `xpra` profile as an opt-in cross-platform forwarding layer on top of
+  `gui`
+- guest-side `xpra` packaging and default backend selection through
+  `ASOX_GUI_BACKEND=xpra`
+- `xpra-info` helper inside the guest
+- QEMU host port forwarding for the Xpra server when the `xpra` profile is
+  active
+- `make xpra-attach` to connect a host Xpra client to the guest app stream
+
+Notes:
+
+- this is the preferred release path for showing Chromium and Tkinter windows
+  on WSL and macOS hosts without relying on a full QEMU desktop window
+- the guest still keeps host-X11 and local-X11 fallbacks, but `xpra` is the
+  most portable direction for the first release
+
+## 2026-06-05 - AWS Session Manager Plugin and Bash Login Shells
+
+Implemented:
+
+- the `ssm` profile as an opt-in AWS Session Manager plugin layer on top of
+  `base aws awscli`
+- official AWS Session Manager plugin `.deb` download caching under
+  `downloads/external/`
+- detached-signature verification of the Session Manager plugin package using
+  the AWS-documented Linux signing key
+- post-bootstrap installation of external `.deb` packages in
+  `scripts/build-rootfs.sh`
+- `make smoke-ssm` and `make smoke-ssm-only` to validate the Session Manager
+  plugin inside the guest
+- stage-2 interactive shells now prefer `/bin/bash --login` when `bash` is
+  present in the rootfs
+- `bash` added to the base Debian manifest so the default guest shell is more
+  comfortable for interactive work
+
+Notes:
+
+- the Session Manager plugin stays outside `debootstrap --include` because it
+  is not a Debian archive package; it is fetched from the official AWS Session
+  Manager plugin URL and installed afterward
+- `awscli` remains a separate post-bootstrap profile component because of the
+  current `trixie` bootstrap issue around `python3-cryptography` and versioned
+  `cffi` virtual dependencies
+
+## 2026-06-05 - Operator Tools Review
+
+Implemented:
+
+- `ops` profile for general operator tooling that maps cleanly to Debian
+  packages
+- `manifests/ops.txt` with `bind9-dnsutils`, `curl`, `git`,
+  `inetutils-telnet`, `jq`, and `vim`
+- `overlays/ops/` profile marker so the guest can tell when the operator layer
+  is active
+- documentation that separates "straight Debian packages" from tools that need
+  versioned or external installation flows
+
+Notes:
+
+- the RPM-world `bind-utils` name maps to `bind9-dnsutils` in Debian
+- `telnet` is best represented by `inetutils-telnet` in current Debian
+- `terraform`, `kubectl`, and `docker` are intentionally kept out of the
+  Debian-only profile slice because they need either version pinning, upstream
+  repositories, or additional service-management work
+
+## 2026-06-05 - Terraform External Profile
+
+Implemented:
+
+- `terraform` profile as a version-pinned external binary layer
+- `TERRAFORM_VERSION` in the `Makefile`, defaulting to `1.15.5`
+- external artifact fetch and verification for Terraform release archives
+- `make smoke-terraform` and `make smoke-terraform-only`
+- generic external rootfs file installation support in `scripts/build-rootfs.sh`
+
+Notes:
+
+- Terraform is fetched from HashiCorp's official release channel rather than
+  from the Debian archive
+- the selected archive checksum is verified against the signed `SHA256SUMS`
+  metadata before the binary is installed into the guest
+
+## 2026-06-05 - kubectl and kubeconfig Helper Layer
+
+Implemented:
+
+- `kubectl` profile as a version-pinned upstream Kubernetes client layer
+- `KUBECTL_VERSION` in the `Makefile`, defaulting to `v1.36.1`
+- official `dl.k8s.io` binary fetch with checksum verification
+- `asox-kubeconfig` helper to initialize, inspect, and install kubeconfig files
+- `make smoke-kubectl` and `make smoke-kubectl-only`
+
+Notes:
+
+- the `kubectl` profile exports `KUBECONFIG=/root/.kube/config`
+- the helper keeps the guest-side kubeconfig workflow explicit without pulling
+  in a larger Kubernetes packaging stack
+
 ## 2026-06-02 - Guest Apt Validation
 
 Implemented:

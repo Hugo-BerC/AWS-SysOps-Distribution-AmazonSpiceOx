@@ -1,0 +1,3 @@
+# The ssm profile is provided by the AWS Session Manager plugin Debian package,
+# which is fetched from AWS documentation-backed URLs and installed after the
+# Debian bootstrap. Keep this manifest empty so debootstrap stays Debian-only.

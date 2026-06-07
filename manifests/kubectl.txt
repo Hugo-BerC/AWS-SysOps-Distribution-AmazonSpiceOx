@@ -1,0 +1,3 @@
+# The kubectl profile is provided by a version-pinned upstream kubectl binary.
+# Keep this manifest empty so Debian bootstrap stays package-driven while the
+# client version remains explicit through KUBECTL_VERSION.

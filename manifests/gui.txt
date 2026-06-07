@@ -1,0 +1,20 @@
+# Minimal graphical userland for browser and desktop Python apps.
+chromium
+dbus
+dbus-x11
+fonts-dejavu-core
+openbox
+python3
+python3-pip
+python3-tk
+python3-venv
+udev
+x11-xserver-utils
+x11-utils
+xauth
+xinit
+xserver-xorg-core
+xserver-xorg-input-libinput
+xserver-xorg-video-fbdev
+xserver-xorg-video-vesa
+xterm

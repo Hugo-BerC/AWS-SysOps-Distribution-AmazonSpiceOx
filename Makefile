@@ -15,6 +15,9 @@ GCC_VERSION ?= 14.3.0
 MUSL_VERSION ?= 1.2.5
 ZLIB_VERSION ?= 1.3.2
 OPENSSL_VERSION ?= 3.5.6
+TERRAFORM_VERSION ?= 1.15.5
+KUBECTL_VERSION ?= v1.36.1
+XPRA_PORT ?= 14500
 
 BUILD_DIR := build
 DL_DIR := downloads
@@ -33,8 +36,12 @@ INITRAMFS_ROOTFS_STAMP := $(INITRAMFS_ROOTFS_DIR)/.stamp
 MANIFEST_DIR := manifests
 POST_MANIFEST_DIR := manifests-post
 DEBIAN_CONFIG_DIR := configs/debian
+AWS_CONFIG_DIR := configs/aws
+XPRA_CONFIG_DIR := configs/xpra
+HASHICORP_CONFIG_DIR := configs/hashicorp
 DEBIAN_SOURCES_LIST := $(DEBIAN_CONFIG_DIR)/sources.list
 DEB_CACHE_DIR := $(DL_DIR)/debian/$(DEBIAN_SUITE)/$(DEBIAN_ARCH)/packages
+EXTERNAL_DL_DIR := $(DL_DIR)/external
 TOOLCHAIN_DIR := $(BUILD_DIR)/toolchain
 TOOLCHAIN_SOURCES_DIR := $(TOOLCHAIN_DIR)/sources
 TOOLCHAIN_BUILD_DIR := $(TOOLCHAIN_DIR)/build
@@ -98,6 +105,26 @@ PROFILE_OVERLAY_DIRS := $(foreach profile,$(filter-out base,$(NORMALIZED_PROFILE
 ROOTFS_OVERLAY_DIRS := $(ROOTFS_TEMPLATE) $(PROFILE_OVERLAY_DIRS)
 ROOTFS_OVERLAY_DIRS_COLON := $(subst $(space),:,$(strip $(ROOTFS_OVERLAY_DIRS)))
 ROOTFS_FILES := $(shell find $(ROOTFS_TEMPLATE) $(OVERLAY_DIR) -type f 2>/dev/null)
+SSM_PLUGIN_KEY_FILE := $(AWS_CONFIG_DIR)/session-manager-plugin.gpg
+SSM_PLUGIN_DIR := $(EXTERNAL_DL_DIR)/session-manager-plugin/$(DEBIAN_ARCH)
+SSM_PLUGIN_DEB := $(SSM_PLUGIN_DIR)/session-manager-plugin.deb
+SSM_PLUGIN_SIG := $(SSM_PLUGIN_DIR)/session-manager-plugin.deb.sig
+SSM_PLUGIN_VERIFY_STAMP := $(SSM_PLUGIN_DIR)/.verified-stamp
+TERRAFORM_DIR := $(EXTERNAL_DL_DIR)/terraform/$(TERRAFORM_VERSION)/$(DEBIAN_ARCH)
+TERRAFORM_ZIP := $(TERRAFORM_DIR)/terraform.zip
+TERRAFORM_SHA256SUMS := $(TERRAFORM_DIR)/terraform_SHA256SUMS
+TERRAFORM_SHA256SUMS_SIG := $(TERRAFORM_DIR)/terraform_SHA256SUMS.sig
+TERRAFORM_BINARY := $(TERRAFORM_DIR)/terraform
+TERRAFORM_VERIFY_STAMP := $(TERRAFORM_DIR)/.verified-stamp
+KUBECTL_DIR := $(EXTERNAL_DL_DIR)/kubectl/$(KUBECTL_VERSION)/$(DEBIAN_ARCH)
+KUBECTL_BINARY := $(KUBECTL_DIR)/kubectl
+KUBECTL_SHA256 := $(KUBECTL_DIR)/kubectl.sha256
+KUBECTL_VERIFY_STAMP := $(KUBECTL_DIR)/.verified-stamp
+XPRA_KEY_DIR := $(EXTERNAL_DL_DIR)/xpra
+XPRA_KEY_FILE := $(XPRA_KEY_DIR)/xpra.asc
+XPRA_KEY_VERIFY_STAMP := $(XPRA_KEY_DIR)/.verified-stamp
+XPRA_KEY_FINGERPRINT := B499 3B57 3231 48E3 7977 E5D8 7325 4CAD 1797 8FAF
+XPRA_SOURCES_FILE := $(XPRA_CONFIG_DIR)/xpra-lts.sources
 
 KERNEL_IMAGE := $(OUT_DIR)/bzImage
 INITRAMFS := $(OUT_DIR)/rootfs.cpio.gz
@@ -112,17 +139,40 @@ ALL_MANIFESTS := $(wildcard $(MANIFEST_DIR)/*.txt)
 ALL_POST_MANIFESTS := $(wildcard $(POST_MANIFEST_DIR)/*.txt)
 DEBIAN_MANIFESTS ?= $(foreach profile,$(NORMALIZED_PROFILES),$(MANIFEST_DIR)/$(profile).txt)
 DEBIAN_POST_MANIFESTS ?= $(foreach profile,$(NORMALIZED_PROFILES),$(wildcard $(POST_MANIFEST_DIR)/$(profile).txt))
+EXTERNAL_DEB_PACKAGES := $(if $(filter ssm,$(NORMALIZED_PROFILES)),$(abspath $(SSM_PLUGIN_DEB)),)
+EXTERNAL_ROOTFS_FILES := $(strip \
+$(if $(filter terraform,$(NORMALIZED_PROFILES)),$(abspath $(TERRAFORM_BINARY)):/usr/local/bin/terraform:0755;) \
+$(if $(filter kubectl,$(NORMALIZED_PROFILES)),$(abspath $(KUBECTL_BINARY)):/usr/local/bin/kubectl:0755;) \
+$(if $(filter xpra,$(NORMALIZED_PROFILES)),$(abspath $(XPRA_KEY_FILE)):/usr/share/keyrings/xpra.asc:0644;) \
+$(if $(filter xpra,$(NORMALIZED_PROFILES)),$(abspath $(XPRA_SOURCES_FILE)):/etc/apt/sources.list.d/xpra-lts.sources:0644;) \
+)
+PROFILE_EXTERNAL_ARTIFACTS := $(strip \
+	$(if $(filter ssm,$(NORMALIZED_PROFILES)),$(SSM_PLUGIN_VERIFY_STAMP),) \
+	$(if $(filter terraform,$(NORMALIZED_PROFILES)),$(TERRAFORM_VERIFY_STAMP),) \
+	$(if $(filter kubectl,$(NORMALIZED_PROFILES)),$(KUBECTL_VERIFY_STAMP),) \
+	$(if $(filter xpra,$(NORMALIZED_PROFILES)),$(XPRA_KEY_VERIFY_STAMP),) \
+)
+QEMU_HOSTFWD := $(if $(filter xpra,$(NORMALIZED_PROFILES)),tcp:127.0.0.1:$(XPRA_PORT)-:$(XPRA_PORT),)
 QEMU_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-$(ACTIVE_PROFILE_ID).log
 QEMU_NET_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-net-$(ACTIVE_PROFILE_ID).log
 QEMU_AWSCLI_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-awscli-$(ACTIVE_PROFILE_ID).log
+QEMU_SSM_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-ssm-$(ACTIVE_PROFILE_ID).log
+QEMU_TERRAFORM_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-terraform-$(ACTIVE_PROFILE_ID).log
+QEMU_KUBECTL_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-kubectl-$(ACTIVE_PROFILE_ID).log
 QEMU_APT_SMOKE_LOG := $(OUT_DIR)/qemu-smoke-apt-$(ACTIVE_PROFILE_ID).log
 
 JOBS ?= $(shell nproc 2>/dev/null || echo 2)
 DETECTED_BUSYBOX_CC := $(shell command -v musl-gcc >/dev/null 2>&1 && echo musl-gcc || echo gcc)
 BUSYBOX_CC ?= $(DETECTED_BUSYBOX_CC)
 BUSYBOX_CC := $(if $(strip $(BUSYBOX_CC)),$(BUSYBOX_CC),$(DETECTED_BUSYBOX_CC))
+ifneq ($(filter gui,$(NORMALIZED_PROFILES)),)
+QEMU_MEMORY ?= 2048M
+else
 QEMU_MEMORY ?= 512M
-QEMU_APPEND ?= console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw
+endif
+QEMU_APPEND ?= console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw net.ifnames=0 biosdevname=0
+QEMU_DISPLAY ?= gtk,gl=off
+QEMU_VGA ?= std
 SMOKE_TIMEOUT ?= 30s
 APT_SMOKE_TIMEOUT ?= 180s
 
@@ -159,13 +209,22 @@ help:
 	@echo "  make root-disk  Build the ext4 persistent root filesystem image"
 	@echo "  make run        Boot in QEMU"
 	@echo "  make run-only   Boot the current artifacts in QEMU without rebuilding"
+	@echo "  make run-gui    Boot in QEMU with a graphical window for guest X11 apps"
+	@echo "  make run-gui-only Boot the current artifacts in QEMU with a graphical window"
+	@echo "  make xpra-attach Attach a local Xpra client to the guest Xpra port"
 	@echo "  make smoke      Boot briefly and check AMAZONSPICEOX_PHASE3_BOOT_OK"
 	@echo "  make smoke-net  Boot briefly, validate basic guest networking, and check AMAZONSPICEOX_NETWORK_SMOKE_OK"
 	@echo "  make smoke-awscli Boot briefly, validate guest awscli, and check AMAZONSPICEOX_AWSCLI_SMOKE_OK"
+	@echo "  make smoke-ssm  Boot briefly, validate the Session Manager plugin, and check AMAZONSPICEOX_SSM_PLUGIN_SMOKE_OK"
+	@echo "  make smoke-terraform Boot briefly, validate guest terraform, and check AMAZONSPICEOX_TERRAFORM_SMOKE_OK"
+	@echo "  make smoke-kubectl Boot briefly, validate guest kubectl and kubeconfig helpers, and check AMAZONSPICEOX_KUBECTL_SMOKE_OK"
 	@echo "  make smoke-apt  Boot briefly, run apt validation inside the guest, and check AMAZONSPICEOX_APT_SMOKE_OK"
 	@echo "  make smoke-only      Run the boot smoke against existing artifacts only"
 	@echo "  make smoke-net-only  Run the guest network smoke against existing artifacts only"
 	@echo "  make smoke-awscli-only Run the guest awscli smoke against existing artifacts only"
+	@echo "  make smoke-ssm-only Run the guest Session Manager Plugin smoke against existing artifacts only"
+	@echo "  make smoke-terraform-only Run the guest terraform smoke against existing artifacts only"
+	@echo "  make smoke-kubectl-only Run the guest kubectl smoke against existing artifacts only"
 	@echo "  make smoke-apt-only  Run the apt smoke against existing artifacts only"
 	@echo "  make clean      Remove generated build/output files"
 	@echo "  make distclean  Also remove downloaded tarballs"
@@ -180,6 +239,11 @@ profile-info:
 	@echo "Profile name: $(ACTIVE_PROFILE_NAME)"
 	@echo "Manifests: $(DEBIAN_MANIFESTS)"
 	@echo "Post manifests: $(DEBIAN_POST_MANIFESTS)"
+	@echo "External debs: $(EXTERNAL_DEB_PACKAGES)"
+	@echo "External rootfs files: $(EXTERNAL_ROOTFS_FILES)"
+	@echo "Terraform version: $(TERRAFORM_VERSION)"
+	@echo "kubectl version: $(KUBECTL_VERSION)"
+	@echo "xpra port: $(XPRA_PORT)"
 	@echo "Overlays: $(ROOTFS_OVERLAY_DIRS)"
 	@echo "Rootfs dir: $(ROOTFS_DIR)"
 	@echo "Rootfs image: $(ROOTFS_IMAGE)"
@@ -376,7 +440,23 @@ openssl-smoke-rootfs: $(ROOTFS_STAMP) $(OPENSSL_SMOKE_BIN) scripts/build-root-di
 .PHONY: fetch
 fetch: check-build-path $(DEB_FETCH_STAMP)
 
-$(DEB_FETCH_STAMP): $(DEBIAN_SOURCES_LIST) $(ALL_MANIFESTS) scripts/fetch-packages.sh | $(DL_DIR)
+$(SSM_PLUGIN_VERIFY_STAMP): scripts/fetch-session-manager-plugin.sh $(SSM_PLUGIN_KEY_FILE) | $(DL_DIR)
+	sh scripts/fetch-session-manager-plugin.sh "$(DEBIAN_ARCH)" "$(abspath $(SSM_PLUGIN_DIR))" "$(abspath $(SSM_PLUGIN_KEY_FILE))"
+	touch "$@"
+
+$(TERRAFORM_VERIFY_STAMP): scripts/fetch-terraform.sh | $(DL_DIR)
+	sh scripts/fetch-terraform.sh "$(TERRAFORM_VERSION)" "$(DEBIAN_ARCH)" "$(abspath $(TERRAFORM_DIR))"
+	touch "$@"
+
+$(KUBECTL_VERIFY_STAMP): scripts/fetch-kubectl.sh | $(DL_DIR)
+	sh scripts/fetch-kubectl.sh "$(KUBECTL_VERSION)" "$(DEBIAN_ARCH)" "$(abspath $(KUBECTL_DIR))"
+	touch "$@"
+
+$(XPRA_KEY_VERIFY_STAMP): scripts/fetch-xpra-key.sh | $(DL_DIR)
+	sh scripts/fetch-xpra-key.sh "$(abspath $(XPRA_KEY_FILE))" "$(XPRA_KEY_FINGERPRINT)"
+	touch "$@"
+
+$(DEB_FETCH_STAMP): $(DEBIAN_SOURCES_LIST) $(ALL_MANIFESTS) $(PROFILE_EXTERNAL_ARTIFACTS) scripts/fetch-packages.sh | $(DL_DIR)
 	sh scripts/fetch-packages.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(abspath $(DEB_CACHE_DIR))" $(DEBIAN_MANIFESTS)
 	touch "$@"
 
@@ -445,7 +525,7 @@ $(LEGACY_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/lin
 rootfs: check-build-path $(ROOTFS_STAMP)
 
 $(ROOTFS_STAMP): $(DEB_FETCH_STAMP) $(INIT_FILE) $(ROOTFS_FILES) $(DEBIAN_SOURCES_LIST) $(ALL_POST_MANIFESTS) scripts/build-rootfs.sh
-	DEBIAN_POST_MANIFESTS="$(DEBIAN_POST_MANIFESTS)" sh scripts/build-rootfs.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(DEBIAN_SOURCES_LIST)" "$(ROOTFS_OVERLAY_DIRS_COLON)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(abspath $(DEB_CACHE_DIR))" "$(ACTIVE_PROFILE_NAME)" $(DEBIAN_MANIFESTS)
+	DEBIAN_POST_MANIFESTS="$(DEBIAN_POST_MANIFESTS)" EXTERNAL_DEB_PACKAGES="$(EXTERNAL_DEB_PACKAGES)" EXTERNAL_ROOTFS_FILES="$(EXTERNAL_ROOTFS_FILES)" sh scripts/build-rootfs.sh "$(DEBIAN_SUITE)" "$(DEBIAN_ARCH)" "$(DEBIAN_MIRROR)" "$(DEBIAN_SOURCES_LIST)" "$(ROOTFS_OVERLAY_DIRS_COLON)" "$(INIT_FILE)" "$(abspath $(ROOTFS_DIR))" "$(abspath $(DEB_CACHE_DIR))" "$(ACTIVE_PROFILE_NAME)" $(DEBIAN_MANIFESTS)
 	touch "$@"
 
 $(INITRAMFS_ROOTFS_STAMP): $(BUSYBOX_SRC)/.config $(KERNEL_HEADERS_DIR)/include/linux/types.h $(INIT_FILE) $(ROOTFS_FILES) scripts/build-rootfs-legacy.sh
@@ -469,14 +549,29 @@ $(ROOTFS_IMAGE): $(ROOTFS_STAMP) scripts/build-root-disk.sh | $(OUT_DIR)
 
 .PHONY: run
 run: all
-	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+	QEMU_HOSTFWD="$(QEMU_HOSTFWD)" QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: run-only
 run-only: check-build-path
 	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
 	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
 	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
-	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+	QEMU_HOSTFWD="$(QEMU_HOSTFWD)" QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: run-gui
+run-gui: all
+	QEMU_GUI=1 QEMU_HOSTFWD="$(QEMU_HOSTFWD)" QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_DISPLAY="$(QEMU_DISPLAY)" QEMU_VGA="$(QEMU_VGA)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: run-gui-only
+run-gui-only: check-build-path
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_GUI=1 QEMU_HOSTFWD="$(QEMU_HOSTFWD)" QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_DISPLAY="$(QEMU_DISPLAY)" QEMU_VGA="$(QEMU_VGA)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-qemu.sh "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: xpra-attach
+xpra-attach: check-build-path
+	xpra attach "tcp://127.0.0.1:$(XPRA_PORT)/"
 
 .PHONY: smoke
 smoke: all
@@ -489,6 +584,18 @@ smoke-net: all
 .PHONY: smoke-awscli
 smoke-awscli: all
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh awscli "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_AWSCLI_SMOKE_OK" "$(QEMU_AWSCLI_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-ssm
+smoke-ssm: all
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh ssm "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_SSM_PLUGIN_SMOKE_OK" "$(QEMU_SSM_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-terraform
+smoke-terraform: all
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh terraform "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_TERRAFORM_SMOKE_OK" "$(QEMU_TERRAFORM_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-kubectl
+smoke-kubectl: all
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh kubectl "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_KUBECTL_SMOKE_OK" "$(QEMU_KUBECTL_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: smoke-apt
 smoke-apt: all
@@ -514,6 +621,27 @@ smoke-awscli-only: check-build-path
 	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
 	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
 	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh awscli "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_AWSCLI_SMOKE_OK" "$(QEMU_AWSCLI_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-ssm-only
+smoke-ssm-only: check-build-path
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh ssm "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_SSM_PLUGIN_SMOKE_OK" "$(QEMU_SSM_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-terraform-only
+smoke-terraform-only: check-build-path
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh terraform "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_TERRAFORM_SMOKE_OK" "$(QEMU_TERRAFORM_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
+
+.PHONY: smoke-kubectl-only
+smoke-kubectl-only: check-build-path
+	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
+	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
+	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
+	QEMU_MEMORY="$(QEMU_MEMORY)" QEMU_APPEND="$(QEMU_APPEND)" sh scripts/run-smoke.sh kubectl "$(APT_SMOKE_TIMEOUT)" "AMAZONSPICEOX_KUBECTL_SMOKE_OK" "$(QEMU_KUBECTL_SMOKE_LOG)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)"
 
 .PHONY: smoke-apt-only
 smoke-apt-only: check-build-path

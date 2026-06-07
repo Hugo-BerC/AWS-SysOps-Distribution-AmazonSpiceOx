@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+port="${XPRA_PORT:-14500}"
+display_num="${XPRA_DISPLAY_NUM:-100}"
+backend="${ASOX_GUI_BACKEND:-auto}"
+
+cat <<EOF
+GUI backend: $backend
+Xpra display: :$display_num
+Xpra port: $port
+
+Host attach command:
+  xpra attach tcp://127.0.0.1:$port/
+
+Typical guest flow:
+  chrome
+  python-gui /root/my-app.py
+EOF

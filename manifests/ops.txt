@@ -1,0 +1,6 @@
+bind9-dnsutils
+curl
+git
+inetutils-telnet
+jq
+vim

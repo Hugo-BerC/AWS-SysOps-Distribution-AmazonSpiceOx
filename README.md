@@ -102,7 +102,14 @@ Implemented:
 - boot logging and basic network bring-up
 - Debian Stable rootfs assembly through `debootstrap`
 - manifest-driven package selection
-- composable `base`, `debug`, and `aws` profile building
+- composable `base`, `debug`, `ops`, `aws`, `awscli`, `ssm`, `terraform`, and
+  `kubectl` profile building
+- optional `gui` profile for Chromium, X11 app launch, and desktop Python
+  runtimes
+- optional `xpra` profile for cross-platform forwarding of individual guest GUI
+  apps to WSL or macOS hosts
+- interactive login shells now prefer `/bin/bash` when it is present in the
+  guest rootfs
 
 Still intentionally small:
 
@@ -135,7 +142,9 @@ sudo apt install -y \
   binutils \
   file \
   ca-certificates \
-  e2fsprogs
+  e2fsprogs \
+  gnupg \
+  unzip
 ```
 
 Run a host check with:
@@ -166,6 +175,8 @@ sudo -E make rootfs
 make initramfs
 sudo -E make image
 make run
+make run-gui
+make xpra-attach
 ```
 
 Avoid `sudo -E make all` for regular local work. It can leave source trees in
@@ -198,9 +209,15 @@ make initramfs
 make image
 make run
 make run-only
+make run-gui
+make run-gui-only
+make xpra-attach
 make smoke
 make smoke-net
 make smoke-awscli
+make smoke-ssm
+make smoke-terraform
+make smoke-kubectl
 make smoke-apt
 ```
 
@@ -212,7 +229,11 @@ make run-only
 make smoke-only
 make smoke-net-only
 make smoke-awscli-only
+make smoke-ssm-only
+make smoke-terraform-only
+make smoke-kubectl-only
 make smoke-apt-only
+make run-gui-only
 make legacy-rootfs
 make clean
 make distclean
@@ -221,10 +242,11 @@ make distclean
 `legacy-rootfs` keeps the older BusyBox-compiled rootfs flow around as
 educational reference. It is also still useful for the tiny initramfs build.
 
-`run-only`, `smoke-only`, `smoke-net-only`, and `smoke-apt-only` reuse the
-current artifacts without rebuilding the rootfs or ext4 image. They are useful
-after a `sudo -E make rootfs` / `sudo -E make image` cycle when you only want
-to re-run QEMU-side validation.
+`run-only`, `smoke-only`, `smoke-net-only`, `smoke-awscli-only`,
+`smoke-ssm-only`, and `smoke-apt-only` reuse the current artifacts without
+rebuilding the rootfs or ext4 image. They are useful after a
+`sudo -E make rootfs` / `sudo -E make image` cycle when you only want to
+re-run QEMU-side validation.
 
 ## Profiles and Manifests
 
@@ -235,6 +257,12 @@ Current manifests:
 - `manifests/base.txt`
 - `manifests/aws.txt`
 - `manifests/awscli.txt`
+- `manifests/ops.txt`
+- `manifests/ssm.txt`
+- `manifests/terraform.txt`
+- `manifests/kubectl.txt`
+- `manifests/xpra.txt`
+- `manifests/gui.txt`
 - `manifests/debug.txt`
 
 Default build:
@@ -252,6 +280,12 @@ make run ASOX_PROFILES="base debug"
 ```
 
 ```bash
+make fetch ASOX_PROFILES="base ops"
+sudo -E make rootfs ASOX_PROFILES="base ops"
+make run ASOX_PROFILES="base ops"
+```
+
+```bash
 make fetch ASOX_PROFILES="base aws"
 sudo -E make rootfs ASOX_PROFILES="base aws"
 make run ASOX_PROFILES="base aws"
@@ -263,10 +297,46 @@ sudo -E make rootfs ASOX_PROFILES="base aws awscli"
 make run ASOX_PROFILES="base aws awscli"
 ```
 
+```bash
+make fetch ASOX_PROFILES="base aws awscli ssm"
+sudo -E make rootfs ASOX_PROFILES="base aws awscli ssm"
+make run ASOX_PROFILES="base aws awscli ssm"
+```
+
+```bash
+make fetch ASOX_PROFILES="base ops terraform"
+sudo -E make rootfs ASOX_PROFILES="base ops terraform"
+make run ASOX_PROFILES="base ops terraform"
+```
+
+```bash
+make fetch ASOX_PROFILES="base ops kubectl" KUBECTL_VERSION=v1.36.1
+sudo -E make rootfs ASOX_PROFILES="base ops kubectl" KUBECTL_VERSION=v1.36.1
+make run ASOX_PROFILES="base ops kubectl" KUBECTL_VERSION=v1.36.1
+```
+
+```bash
+make fetch ASOX_PROFILES="base gui"
+sudo -E make rootfs ASOX_PROFILES="base gui"
+make initramfs
+sudo -E make image ASOX_PROFILES="base gui"
+make run-gui-only ASOX_PROFILES="base gui"
+```
+
+```bash
+make fetch ASOX_PROFILES="base gui xpra"
+sudo -E make rootfs ASOX_PROFILES="base gui xpra"
+make initramfs
+sudo -E make image ASOX_PROFILES="base gui xpra"
+make run-only ASOX_PROFILES="base gui xpra"
+```
+
 Package names are standard Debian package names.
 `base` is always included automatically.
 The current `aws` profile is intentionally lightweight and keeps the first
 Debian bootstrap focused on packages that behave well under `debootstrap`.
+The `ops` profile is the main place for day-to-day operator tools that map
+cleanly to Debian packages.
 `awscli` currently lives in its own optional manifest:
 
 ```text
@@ -275,9 +345,77 @@ manifests-post/awscli.txt
 
 That means:
 
+- `ASOX_PROFILES="base ops"` gives you the general-purpose operator toolkit
 - `ASOX_PROFILES="base aws"` gives you the light AWS-oriented slice
 - `ASOX_PROFILES="base aws awscli"` adds the AWS CLI on top
+- `ASOX_PROFILES="base aws awscli ssm"` adds the AWS Session Manager plugin on
+  top of the AWS CLI layer
+- `ASOX_PROFILES="base ops terraform"` adds a version-pinned Terraform binary
+- `ASOX_PROFILES="base ops kubectl"` adds a version-pinned `kubectl` client
+  plus kubeconfig helpers
+- `ASOX_PROFILES="base gui"` adds a minimal X11-capable guest with Chromium
+  and desktop Python launch helpers
+- `ASOX_PROFILES="base gui xpra"` adds an Xpra server path for forwarding
+  individual guest windows to WSL or macOS hosts
 - `cloud-init` stays as a later Phase VI candidate
+
+Current package mapping:
+
+- `bind-utils` on RPM-based distros maps to `bind9-dnsutils` here
+- `telnet` is provided by `inetutils-telnet`
+- `vim` is now the full `vim` package in the `ops` profile rather than
+  `vim-tiny`
+- `curl`, `git`, and `jq` are straight Debian packages
+- `terraform` is an externally fetched HashiCorp release archive with explicit
+  version pinning through `TERRAFORM_VERSION`
+- `kubectl` is an externally fetched upstream Kubernetes client with explicit
+  version pinning through `KUBECTL_VERSION`
+- `chromium`, `xinit`, `Xorg`, and Python GUI bits live in the opt-in `gui`
+  profile
+- `xpra` lives in its own opt-in profile so the forwarding path stays explicit
+  and releasable across WSL and macOS
+- on Debian `trixie`, the `xpra` profile installs `xpra` from the official
+  Xpra repository after the base bootstrap, while keeping `xvfb` in the normal
+  Debian package set
+- the post-bootstrap `xpra` install also includes `xpra-x11`, which upstream
+  recommends on Debian for seamless X11 app forwarding
+
+Tools that stay outside the Debian archive for now:
+
+- `docker`: packaging is straightforward from Docker's official Debian repo,
+  but a useful Docker layer also needs daemon lifecycle handling in our
+  non-systemd guest
+
+Terraform example:
+
+```bash
+make fetch ASOX_PROFILES="base ops terraform" TERRAFORM_VERSION=1.15.5
+sudo -E make rootfs ASOX_PROFILES="base ops terraform" TERRAFORM_VERSION=1.15.5
+make smoke-terraform-only ASOX_PROFILES="base ops terraform" TERRAFORM_VERSION=1.15.5
+```
+
+Implementation detail:
+
+- `terraform` is fetched from `releases.hashicorp.com`
+- the `SHA256SUMS` file is verified against HashiCorp's signing key
+- the selected archive checksum is verified before the binary is copied into
+  `/usr/local/bin/terraform`
+
+kubectl example:
+
+```bash
+make fetch ASOX_PROFILES="base ops kubectl" KUBECTL_VERSION=v1.36.1
+sudo -E make rootfs ASOX_PROFILES="base ops kubectl" KUBECTL_VERSION=v1.36.1
+make smoke-kubectl-only ASOX_PROFILES="base ops kubectl" KUBECTL_VERSION=v1.36.1
+```
+
+Implementation detail:
+
+- `kubectl` is fetched from `dl.k8s.io`
+- the upstream `kubectl.sha256` file is used for validation before the binary
+  is copied into `/usr/local/bin/kubectl`
+- AmazonSpiceOx also includes `kubeconfig` and exports
+  `KUBECONFIG=/root/.kube/config` when the `kubectl` profile is active
 
 Example with the optional AWS CLI manifest:
 
@@ -302,6 +440,9 @@ Implementation detail:
   `debootstrap --include`
 - this avoids a current `trixie` bootstrap failure around `python3-cryptography`
   and versioned `cffi` virtual dependencies
+- `ssm` is fetched from the official AWS Session Manager plugin Debian package
+  URL, validated against the official AWS signing key and detached signature,
+  and then installed post-bootstrap
 
 The active profile also changes the generated rootfs and image paths. For
 example:
@@ -310,6 +451,118 @@ example:
 build/rootfs-base-debug/
 out/rootfs-base-debug.ext4
 ```
+
+## Graphical Apps
+
+AmazonSpiceOx can now launch guest GUI apps without committing to a full
+desktop environment.
+
+The `gui` profile installs:
+
+- `chromium`
+- `xinit`
+- `Xorg`
+- `openbox`
+- `xterm`
+- `python3`
+- `python3-pip`
+- `python3-venv`
+- `python3-tk`
+
+When the `gui` profile is active, AmazonSpiceOx now defaults QEMU memory to
+`2048M` instead of `512M`, because Chromium is not happy in a half-gig guest.
+
+There are two GUI modes:
+
+1. host-forwarded X11, where guest apps open directly on your desktop
+2. guest-local X11, where QEMU opens a graphical VM window
+
+There is now a third mode aimed at release portability:
+
+3. `xpra`, where the guest app is exported as an individual remote window and
+   attached from the host with an Xpra client
+
+For host-forwarded X11, run an X server on the Windows host that listens on
+TCP and then boot the guest normally:
+
+```bash
+make fetch ASOX_PROFILES="base gui"
+make verify-packages
+sudo -E make rootfs ASOX_PROFILES="base gui"
+make initramfs
+sudo -E make image ASOX_PROFILES="base gui"
+make run-only ASOX_PROFILES="base gui"
+```
+
+Inside the guest:
+
+```bash
+gui-doctor
+chrome
+python-gui
+python-gui /root/my-app.py
+gui-run xterm
+```
+
+By default, `gui-run` and the wrappers built on top of it return your shell
+prompt immediately and leave the GUI process running in the background. For a
+foreground debugging run, prefix the command with:
+
+```bash
+ASOX_GUI_WAIT=1
+```
+
+The guest defaults `DISPLAY` to `10.0.2.2:0`, so the only missing piece in
+that mode is the host X server.
+
+If you want the fallback mode with a QEMU window instead, use:
+
+```bash
+make run-gui-only ASOX_PROFILES="base gui"
+```
+
+`chrome` is intentionally a thin wrapper around Debian's `chromium` package so
+we can keep the workflow package-driven and reproducible while still giving you
+a Chrome-like browser inside the VM.
+
+### Xpra Mode
+
+The `xpra` profile is the recommended release path for WSL and macOS hosts.
+
+Build and boot:
+
+```bash
+make fetch ASOX_PROFILES="base gui xpra"
+make verify-packages
+sudo -E make rootfs ASOX_PROFILES="base gui xpra"
+make initramfs
+sudo -E make image ASOX_PROFILES="base gui xpra"
+make run-only ASOX_PROFILES="base gui xpra"
+```
+
+Inside the guest:
+
+```bash
+xpra-info
+chrome
+python-gui
+python-gui /root/my-app.py
+```
+
+From the host, attach with:
+
+```bash
+make xpra-attach ASOX_PROFILES="base gui xpra"
+```
+
+or directly:
+
+```bash
+xpra attach tcp://127.0.0.1:14500/
+```
+
+This works because QEMU forwards host port `14500` to the guest `xpra` server
+when the `xpra` profile is active.
 
 ## Rootfs Strategy
 
@@ -339,6 +592,19 @@ Hostname defaults to:
 
 ```text
 arrakis
+```
+
+When `bash` is present in the guest, AmazonSpiceOx now prefers a login
+`/bin/bash` session for the interactive shell. If `bash` is missing, it falls
+back to `/bin/sh`.
+
+For the `kubectl` profile, the kubeconfig helper works like this:
+
+```bash
+kubeconfig status
+kubeconfig init
+kubeconfig install /path/to/config
+cat my-kubeconfig.yaml | kubeconfig install-stdin
 ```
 
 ## Documentation
