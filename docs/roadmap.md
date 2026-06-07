@@ -120,6 +120,7 @@ Candidates:
 
 - awscli
 - Terraform
+- Docker Engine / Docker CLI
 - AWS SSM Agent
 - kubectl
 - eksctl
@@ -128,8 +129,35 @@ Candidates:
 
 Current first cut:
 
+- `ASOX_PROFILES="base ops"` for a fuller operator toolbox inside the guest
 - `ASOX_PROFILES="base aws"` for a lightweight AWS-oriented guest
 - `ASOX_PROFILES="base aws awscli"` for an opt-in AWS CLI layer
+- `ASOX_PROFILES="base aws awscli ssm"` for an opt-in Session Manager plugin
+  layer on top of the AWS CLI
+- `ASOX_PROFILES="base ops terraform"` for a version-pinned Terraform layer
+- `ASOX_PROFILES="base ops kubectl"` for a version-pinned kubectl client plus
+  kubeconfig helper layer
+- `ASOX_PROFILES="base gui"` for a minimal X11-capable guest that can launch
+  Chromium and desktop Python apps without a full desktop environment
+- `ASOX_PROFILES="base gui xpra"` for forwarding Chromium and Tkinter apps to
+  WSL and macOS hosts as individual windows
 - `make smoke-awscli` / `make smoke-awscli-only` to validate the AWS CLI
+- `make smoke-ssm` / `make smoke-ssm-only` to validate the Session Manager
+  plugin inside the guest
+- `make smoke-terraform` / `make smoke-terraform-only` to validate Terraform
+  inside the guest
+- `make smoke-kubectl` / `make smoke-kubectl-only` to validate kubectl and
+  kubeconfig helpers inside the guest
 - the `awscli` layer is installed post-bootstrap with `apt` rather than through
   `debootstrap --include`
+- the `ssm` layer is fetched from AWS, signature-verified, and installed
+  post-bootstrap because it does not come from the Debian archive
+- the `terraform` layer is fetched from HashiCorp releases, checksum-verified,
+  and pinned through `TERRAFORM_VERSION`
+- the `kubectl` layer is fetched from `dl.k8s.io`, checksum-verified, and
+  pinned through `KUBECTL_VERSION`
+
+Next recommended slices:
+
+- `docker`: official Docker Debian repo packages, paired with a later service
+  management phase because this guest does not use systemd

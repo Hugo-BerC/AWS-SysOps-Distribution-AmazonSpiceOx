@@ -1,3 +1,4 @@
+bash
 ca-certificates
 ifupdown
 iproute2

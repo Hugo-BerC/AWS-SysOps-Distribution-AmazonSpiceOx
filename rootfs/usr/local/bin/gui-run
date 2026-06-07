@@ -1,0 +1,156 @@
+#!/bin/sh
+set -eu
+
+backend="${ASOX_GUI_BACKEND:-auto}"
+wait_mode="${ASOX_GUI_WAIT:-0}"
+
+quote_for_shell() {
+    printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
+}
+
+build_command_string() {
+    first=1
+    for arg in "$@"; do
+        quoted_arg="$(quote_for_shell "$arg")"
+        if [ "$first" -eq 1 ]; then
+            command_string="$quoted_arg"
+            first=0
+        else
+            command_string="$command_string $quoted_arg"
+        fi
+    done
+
+    printf '%s' "$command_string"
+}
+
+host_display_ready() {
+    [ -n "${DISPLAY:-}" ] || return 1
+
+    if command -v xdpyinfo >/dev/null 2>&1; then
+        xdpyinfo >/dev/null 2>&1 || return 1
+    fi
+
+    return 0
+}
+
+client_session="/usr/local/bin/asox-xsession"
+server_bin="/usr/bin/Xorg"
+
+run_local_x11() {
+    if ! command -v xinit >/dev/null 2>&1; then
+        echo "gui-run: xinit is not installed in this guest" >&2
+        exit 1
+    fi
+
+    if [ ! -x "$server_bin" ]; then
+        server_bin="$(command -v Xorg 2>/dev/null || true)"
+    fi
+
+    if [ -z "$server_bin" ] || [ ! -x "$server_bin" ]; then
+        echo "gui-run: Xorg is not available in this guest" >&2
+        exit 1
+    fi
+
+    if [ "$#" -eq 0 ]; then
+        exec xinit "$client_session" -- "$server_bin" :0 -nolisten tcp
+    fi
+
+    exec xinit "$client_session" "$@" -- "$server_bin" :0 -nolisten tcp
+}
+
+run_xpra() {
+    xpra_port="${XPRA_PORT:-14500}"
+    xpra_display_num="${XPRA_DISPLAY_NUM:-100}"
+
+    if ! command -v xpra >/dev/null 2>&1; then
+        echo "gui-run: xpra is not installed in this guest" >&2
+        exit 1
+    fi
+
+    if [ "$#" -eq 0 ]; then
+        if command -v xterm >/dev/null 2>&1; then
+            set -- xterm -fa Monospace -fs 11
+        else
+            set -- /bin/bash --login
+        fi
+    fi
+
+    child_command="$(build_command_string "$client_session" "$@")"
+
+    echo "xpra server listening on tcp://0.0.0.0:$xpra_port/ (display :$xpra_display_num)" >&2
+    echo "Host attach command: xpra attach tcp://127.0.0.1:$xpra_port/" >&2
+
+    exec xpra start ":$xpra_display_num" \
+        --daemon=no \
+        --exit-with-children=yes \
+        --bind-tcp="0.0.0.0:$xpra_port" \
+        --html=off \
+        --dbus-launch=no \
+        --mdns=no \
+        --notifications=no \
+        --pulseaudio=no \
+        --webcam=no \
+        --opengl=no \
+        --start-child="$child_command"
+}
+
+if [ ! -x "$client_session" ]; then
+    echo "gui-run: missing session helper: $client_session" >&2
+    exit 1
+fi
+
+run_selected_backend() {
+    case "$backend" in
+        xpra)
+            run_xpra "$@"
+            ;;
+        host-x11)
+            if host_display_ready; then
+                if [ "$#" -eq 0 ]; then
+                    if command -v xterm >/dev/null 2>&1; then
+                        exec xterm -fa Monospace -fs 11
+                    fi
+                    exec /bin/bash --login
+                fi
+                exec "$@"
+            fi
+            echo "gui-run: host DISPLAY is not reachable for backend host-x11" >&2
+            echo "gui-run: current DISPLAY=${DISPLAY:-<unset>}" >&2
+            echo "gui-run: for direct host windows, start a reachable host X server first" >&2
+            echo "gui-run: for the fallback local guest X11 session, use:" >&2
+            echo "gui-run:   ASOX_GUI_BACKEND=local-x11 <command>" >&2
+            echo "gui-run: and boot with make run-gui-only ASOX_PROFILES=\"base gui\"" >&2
+            exit 1
+            ;;
+        local-x11)
+            run_local_x11 "$@"
+            ;;
+    esac
+
+    if host_display_ready; then
+        if [ "$#" -eq 0 ]; then
+            if command -v xterm >/dev/null 2>&1; then
+                exec xterm -fa Monospace -fs 11
+            fi
+            exec /bin/bash --login
+        fi
+
+        exec "$@"
+    fi
+
+    run_local_x11 "$@"
+}
+
+if [ "$wait_mode" = "1" ]; then
+    run_selected_backend "$@"
+fi
+
+log_suffix="$(date +%Y%m%d-%H%M%S 2>/dev/null || echo now)"
+log_file="/tmp/gui-run-$log_suffix-$$.log"
+
+( run_selected_backend "$@" ) </dev/null >"$log_file" 2>&1 &
+child_pid=$!
+
+echo "gui-run: started pid $child_pid"
+echo "gui-run: log file $log_file"
+exit 0

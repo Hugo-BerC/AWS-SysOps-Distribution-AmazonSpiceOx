@@ -154,6 +154,15 @@ case "$mode" in
     awscli)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=awscli"
         ;;
+    ssm)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=ssm"
+        ;;
+    terraform)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=terraform"
+        ;;
+    kubectl)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=kubectl"
+        ;;
     net|network)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=network"
         ;;
@@ -188,13 +197,25 @@ fi
 
 marker_found=0
 
-if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ] || [ "$mode" = "awscli" ]; then
+if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ] || [ "$mode" = "awscli" ] || [ "$mode" = "ssm" ] || [ "$mode" = "terraform" ] || [ "$mode" = "kubectl" ]; then
     repair_guest_fs "$rootfs_image"
 
     if [ "$mode" = "apt" ]; then
         guest_status_path="/var/lib/amazonspiceox/smoke/apt.status"
         guest_log_path="/var/log/apt-smoke.log"
         guest_label="apt"
+    elif [ "$mode" = "kubectl" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/kubectl.status"
+        guest_log_path="/var/log/kubectl-smoke.log"
+        guest_label="kubectl"
+    elif [ "$mode" = "terraform" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/terraform.status"
+        guest_log_path="/var/log/terraform-smoke.log"
+        guest_label="terraform"
+    elif [ "$mode" = "ssm" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/ssm.status"
+        guest_log_path="/var/log/ssm-smoke.log"
+        guest_label="ssm"
     elif [ "$mode" = "awscli" ]; then
         guest_status_path="/var/lib/amazonspiceox/smoke/awscli.status"
         guest_log_path="/var/log/awscli-smoke.log"

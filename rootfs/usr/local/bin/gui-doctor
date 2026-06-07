@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+
+backend="${ASOX_GUI_BACKEND:-auto}"
+display_value="${DISPLAY:-}"
+
+echo "GUI backend: $backend"
+echo "DISPLAY: ${display_value:-<unset>}"
+
+if command -v xdpyinfo >/dev/null 2>&1; then
+    if xdpyinfo >/dev/null 2>&1; then
+        echo "Host X11 check: OK"
+        exit 0
+    fi
+    echo "Host X11 check: FAILED"
+else
+    echo "Host X11 check: xdpyinfo not installed"
+fi
+
+cat <<'EOF'
+
+Hints:
+  - For direct windows on the host, run a reachable X server on the host.
+  - The guest expects DISPLAY to point at that host X server.
+  - For the fallback local guest X11 session, use:
+      ASOX_GUI_BACKEND=local-x11 chrome
+    together with:
+      make run-gui-only ASOX_PROFILES="base gui"
+EOF

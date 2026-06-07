@@ -1,0 +1,3 @@
+# The terraform profile is provided by a version-pinned external Terraform
+# release archive from HashiCorp. Keep this manifest empty so debootstrap stays
+# Debian-only and Terraform versioning remains explicit through TERRAFORM_VERSION.

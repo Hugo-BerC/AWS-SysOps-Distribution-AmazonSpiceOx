@@ -6,15 +6,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         bash \
         bc \
+        binutils \
         bison \
         build-essential \
         bzip2 \
         ca-certificates \
         cpio \
         curl \
+        debootstrap \
         e2fsprogs \
         file \
         flex \
+        gnupg \
         gzip \
         libgmp-dev \
         libelf-dev \

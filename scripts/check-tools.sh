@@ -10,9 +10,17 @@ need() {
     fi
 }
 
-for tool in awk ar curl make gcc g++ ld bc bison flex cpio gzip mktemp tar timeout sort xargs xz bzip2 qemu-system-x86_64 yes truncate mke2fs debootstrap; do
+for tool in awk ar curl make gcc g++ ld bc bison flex cpio gzip mktemp tar timeout sort xargs xz bzip2 qemu-system-x86_64 yes truncate mke2fs debootstrap unzip sha256sum; do
     need "$tool"
 done
+
+if ! command -v gpg >/dev/null 2>&1; then
+    echo "warning: gpg not found; install gnupg before using ASOX_PROFILES that include ssm or terraform"
+fi
+
+if ! command -v xpra >/dev/null 2>&1; then
+    echo "warning: xpra not found on the host; install it if you want to use make xpra-attach"
+fi
 
 if ! command -v musl-gcc >/dev/null 2>&1; then
     echo "warning: musl-gcc not found; BusyBox will use gcc unless BUSYBOX_CC is set"
@@ -58,7 +66,7 @@ check_openssl_prereqs
 if [ "$missing" -ne 0 ]; then
     echo
     echo "Suggested Debian/Ubuntu host packages:"
-    echo "  sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev cpio curl xz-utils bzip2 gzip make qemu-system-x86 debootstrap binutils file ca-certificates e2fsprogs"
+    echo "  sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev cpio curl xz-utils bzip2 gzip make qemu-system-x86 debootstrap binutils file ca-certificates e2fsprogs gnupg unzip"
     exit 1
 fi
 

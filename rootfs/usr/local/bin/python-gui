@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -eq 0 ]; then
+    exec /usr/local/bin/gui-run /usr/bin/python3 -c '
+import tkinter as tk
+
+root = tk.Tk()
+root.title("AmazonSpiceOx Python GUI")
+label = tk.Label(root, text="Python GUI runtime ready", padx=24, pady=24)
+label.pack()
+root.mainloop()
+'
+fi
+
+exec /usr/local/bin/gui-run /usr/bin/python3 "$@"

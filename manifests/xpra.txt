@@ -1,0 +1,2 @@
+# Xpra support uses Debian packages where available plus the official Xpra repo.
+xvfb

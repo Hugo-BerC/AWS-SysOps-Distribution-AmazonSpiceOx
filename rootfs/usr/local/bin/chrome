@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+
+chrome_bin=""
+
+for candidate in /usr/bin/chromium /usr/bin/chromium-browser; do
+    if [ -x "$candidate" ]; then
+        chrome_bin="$candidate"
+        break
+    fi
+done
+
+if [ -z "$chrome_bin" ]; then
+    echo "chrome: chromium is not installed in this guest" >&2
+    exit 1
+fi
+
+profile_dir="${HOME:-/root}/.config/chromium-amazonspiceox"
+mkdir -p "$profile_dir"
+
+set -- \
+    --no-first-run \
+    --no-default-browser-check \
+    --disable-gpu \
+    --disable-background-networking \
+    --disable-component-update \
+    --disable-dev-shm-usage \
+    --disable-extensions \
+    --disable-sync \
+    --disable-features=MediaRouter \
+    --password-store=basic \
+    --renderer-process-limit=2 \
+    --user-data-dir="$profile_dir" \
+    "$@"
+
+if [ "$(id -u)" -eq 0 ]; then
+    set -- --no-sandbox "$@"
+fi
+
+exec /usr/local/bin/gui-run "$chrome_bin" "$@"
