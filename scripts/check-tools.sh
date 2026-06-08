@@ -10,7 +10,7 @@ need() {
     fi
 }
 
-for tool in awk ar curl make gcc g++ ld bc bison flex cpio gzip mktemp tar timeout sort xargs xz bzip2 qemu-system-x86_64 yes truncate mke2fs debootstrap unzip sha256sum; do
+for tool in awk ar curl make gcc g++ ld bc bison flex cpio gzip mktemp tar timeout sort xargs xz bzip2 qemu-system-x86_64 yes truncate mke2fs debootstrap unzip sha256sum patch; do
     need "$tool"
 done
 
@@ -66,7 +66,7 @@ check_openssl_prereqs
 if [ "$missing" -ne 0 ]; then
     echo
     echo "Suggested Debian/Ubuntu host packages:"
-    echo "  sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev cpio curl xz-utils bzip2 gzip make qemu-system-x86 debootstrap binutils file ca-certificates e2fsprogs gnupg unzip"
+    echo "  sudo apt install -y build-essential bc bison flex libssl-dev libelf-dev cpio curl xz-utils bzip2 gzip make qemu-system-x86 debootstrap binutils file ca-certificates e2fsprogs gnupg unzip patch"
     exit 1
 fi
 

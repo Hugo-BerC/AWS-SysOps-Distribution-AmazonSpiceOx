@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+if command -v tmux >/dev/null 2>&1; then
+    exec tmux new-session -A -s arrakis
+fi
+
+echo "asox-console: tmux is not installed in this profile" >&2
+echo "asox-console: rebuild with ASOX_PROFILES including ops" >&2
+exec "${SHELL:-/bin/sh}" -l

@@ -1,0 +1,317 @@
+﻿diff --git "a/C:\\Users\\hugo.bermejo\\Desktop\\Terraform\\SSM-PowerConnect\\AmazonSpiceOx\\ssm_powerconnect.py" "b/downloads\\external\\ssm-powerconnect\\main\\AmazonSpiceOx\\ssm_powerconnect.py"
+index b05ef39..b415efa 100644
+--- a/ssm_powerconnect.py
++++ b/ssm_powerconnect.py
+@@ -18,6 +18,20 @@ import configparser
+ APP_NAME = "SSM-PowerConnect"
+ DEFAULT_REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "eu-west-1"
+ 
++BG_COLOR = "#0d1117"
++PANEL_COLOR = "#111827"
++PANEL_ALT_COLOR = "#151f2e"
++TEXT_COLOR = "#e5e7eb"
++MUTED_COLOR = "#9ca3af"
++ACCENT_COLOR = "#facc15"
++LINK_COLOR = "#38bdf8"
++ENTRY_BG = "#f8fafc"
++ENTRY_FG = "#0f172a"
++FONT_NAME = "DejaVu Sans Mono"
++FONT = (FONT_NAME, 11)
++FONT_SMALL = (FONT_NAME, 10)
++FONT_TITLE = (FONT_NAME, 13, "bold")
++
+ 
+ def log_error(message):
+     print(f"ERROR: {message}")
+@@ -24,6 +38,23 @@ def log_error(message):
+     print(f"ERROR: {message}")
+ 
+ 
++def read_aws_config():
++    config_path = os.path.expanduser("~/.aws/config")
++    parser = configparser.ConfigParser()
++
++    if not os.path.isfile(config_path):
++        return config_path, parser, None
++
++    try:
++        parser.read(config_path)
++    except configparser.Error as exc:
++        error_message = f"{config_path}: {exc}"
++        log_error(f"Invalid AWS config: {error_message}")
++        return config_path, parser, error_message
++
++    return config_path, parser, None
++
++
+ def get_aws_cli_path():
+     aws_path = shutil.which("aws")
+     if aws_path:
+@@ -36,7 +67,7 @@ def get_aws_cli_path():
+ 
+ 
+ def get_terminal_path():
+-    for name in ("xterm", "x-terminal-emulator", "kgx", "gnome-terminal", "xfce4-terminal", "konsole"):
++    for name in ("asox-terminal", "xterm", "x-terminal-emulator", "kgx", "gnome-terminal", "xfce4-terminal", "konsole"):
+         terminal_path = shutil.which(name)
+         if terminal_path:
+             return terminal_path
+@@ -129,11 +160,9 @@ def get_profiles():
+ 
+ 
+ def load_profile_account_ids():
+-    config_path = os.path.expanduser("~/.aws/config")
+-    parser = configparser.ConfigParser()
+-    if not os.path.isfile(config_path):
++    _config_path, parser, parse_error = read_aws_config()
++    if parse_error:
+         return {}
+-    parser.read(config_path)
+     account_ids = {}
+     for section in parser.sections():
+         if section == "default":
+@@ -163,10 +192,13 @@ def fetch_account_id_for_profile(profile):
+ 
+ 
+ def sync_account_ids():
+-    config_path = os.path.expanduser("~/.aws/config")
+-    parser = configparser.ConfigParser()
+-    if os.path.isfile(config_path):
+-        parser.read(config_path)
++    config_path, parser, parse_error = read_aws_config()
++    if parse_error:
++        messagebox.showerror(
++            "AWS config",
++            f"Could not parse AWS config:\n{parse_error}\n\nFix ~/.aws/config and retry.",
++        )
++        return
+ 
+     updated = 0
+     for profile in profiles:
+@@ -463,19 +495,8 @@ def add_tab_with_background(notebook, text, image_path):
+ 
+ 
+ def create_tab_with_background(notebook, text, image_path):
+-    frame = ttk.Frame(notebook, style="TFrame")
++    frame = tk.Frame(notebook, bg=BG_COLOR)
+     notebook.add(frame, text=text)
+-
+-    if not image_path or not os.path.isfile(image_path):
+-        return frame
+-
+-    bg_image = Image.open(image_path)
+-    bg_photo = ImageTk.PhotoImage(bg_image.resize((1920, 1080)))
+-
+-    background_label = tk.Label(frame, image=bg_photo)
+-    background_label.image = bg_photo
+-    background_label.place(relwidth=1, relheight=1)
+-
+     return frame
+ 
+ 
+@@ -709,27 +730,32 @@ def main():
+ 
+     root = tk.Tk()
+     root.title(f"{APP_NAME} for AmazonSpiceOx")
+-    root.geometry("1440x740")
++    root.geometry("1280x760")
++    root.minsize(1080, 680)
++    root.configure(bg=BG_COLOR)
++    root.option_add("*Font", FONT)
+ 
+     style = ttk.Style()
+     style.theme_use("clam")
+-    style.configure("Treeview", font=("Consolas", 12), background="black", fieldbackground="black", foreground="#258EFE", highlightthickness=0, bd=0)
+-    style.configure("Treeview.Heading", font=("Consolas", 12), background="#333333", foreground="white")
+-    style.configure("TLabel", font=("Consolas", 12), background="#2E2E2E", foreground="green")
+-    style.configure("TButton", font=("Consolas", 12), background="#3E3E3E", foreground="black", padding=5)
+-    style.configure("TCombobox", font=("Consolas", 14), background="black", foreground="black", selectbackground="#444444", selectforeground="white")
+-    style.configure("TEntry", font=("Consolas", 12), background="black", foreground="white")
+-    style.configure("TNotebook", background="#2E2E2E", borderwidth=0)
+-    style.configure("TNotebook.Tab", font=("Consolas", 12), background="#2E2E2E", foreground="black")
+-    style.configure("TFrame", background="black")
+-    style.configure("Action.TButton", background="black", foreground="yellow")
+-    style.map("Action.TButton", background=[("active", "#222222")], foreground=[("active", "yellow")])
++    style.configure("Treeview", font=FONT, background=PANEL_COLOR, fieldbackground=PANEL_COLOR, foreground=LINK_COLOR, rowheight=28, borderwidth=0)
++    style.configure("Treeview.Heading", font=FONT_TITLE, background=PANEL_ALT_COLOR, foreground=TEXT_COLOR, relief="flat")
++    style.map("Treeview", background=[("selected", "#1d4ed8")], foreground=[("selected", "#ffffff")])
++    style.configure("TLabel", font=FONT, background=BG_COLOR, foreground=TEXT_COLOR)
++    style.configure("TButton", font=FONT, background=PANEL_ALT_COLOR, foreground=TEXT_COLOR, padding=(10, 6), borderwidth=0)
++    style.map("TButton", background=[("active", "#1f2937")], foreground=[("active", "#ffffff")])
++    style.configure("TCombobox", font=FONT, fieldbackground=ENTRY_BG, background=ENTRY_BG, foreground=ENTRY_FG, arrowsize=14)
++    style.configure("TNotebook", background=BG_COLOR, borderwidth=0, tabmargins=(8, 6, 8, 0))
++    style.configure("TNotebook.Tab", font=FONT, background=PANEL_COLOR, foreground=MUTED_COLOR, padding=(16, 8))
++    style.map("TNotebook.Tab", background=[("selected", PANEL_ALT_COLOR)], foreground=[("selected", ACCENT_COLOR)])
++    style.configure("TFrame", background=BG_COLOR)
++    style.configure("Action.TButton", font=FONT, background="#172554", foreground="#ffffff", padding=(12, 7))
++    style.map("Action.TButton", background=[("active", "#1d4ed8")], foreground=[("active", "#ffffff")])
+ 
+     selected_profile = tk.StringVar()
+     profile_account_ids = load_profile_account_ids()
+ 
+     notebook = ttk.Notebook(root, style="TNotebook")
+-    notebook.pack(expand=True, fill="both")
++    notebook.pack(expand=True, fill="both", padx=10, pady=10)
+ 
+     skin_path = get_skin_path()
+ 
+@@ -738,24 +764,35 @@ def main():
+     powercommand_frame = create_tab_with_background(notebook, "PowerCommand", skin_path)
+     powerebs_frame = create_tab_with_background(notebook, "PowerEBS", skin_path)
+ 
+-    profile_frame = tk.Frame(powercon_frame, bg="black", padx=5, pady=5)
+-    profile_frame.place(x=20, y=20, relwidth=0.95)
++    powercon_frame.grid_columnconfigure(0, weight=1)
++    powercon_frame.grid_rowconfigure(1, weight=1)
++
++    controls_frame = tk.Frame(powercon_frame, bg=PANEL_COLOR, padx=14, pady=12)
++    controls_frame.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 10))
++    controls_frame.grid_columnconfigure(2, weight=1)
++    controls_frame.grid_columnconfigure(5, weight=1)
++
++    title_label = tk.Label(controls_frame, text=APP_NAME, font=FONT_TITLE, bg=PANEL_COLOR, fg=ACCENT_COLOR)
++    title_label.grid(row=0, column=0, columnspan=2, padx=(0, 18), pady=(0, 10), sticky="w")
+ 
+-    profile_menu_label = tk.Label(profile_frame, text="Search profile: ", font=("Consolas", 12), bg="black", fg="yellow")
+-    profile_menu_label.grid(row=0, column=0, padx=5, sticky="w")
++    region_label = tk.Label(controls_frame, text=f"Region: {DEFAULT_REGION}", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
++    region_label.grid(row=0, column=2, columnspan=4, pady=(0, 10), sticky="e")
+ 
+-    profile_search_entry = tk.Entry(profile_frame, font=("Consolas", 12), width=30, bg="white", fg="black", insertbackground="black")
+-    profile_search_entry.grid(row=0, column=1, padx=5, sticky="w")
++    profile_menu_label = tk.Label(controls_frame, text="Profile", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
++    profile_menu_label.grid(row=1, column=0, padx=(0, 8), pady=4, sticky="w")
++
++    profile_search_entry = tk.Entry(controls_frame, font=FONT, width=26, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
++    profile_search_entry.grid(row=1, column=1, padx=(0, 10), pady=4, sticky="ew")
+     profile_search_entry.bind("<KeyRelease>", filter_profiles)
+ 
+-    profile_menu = ttk.Combobox(profile_frame, textvariable=selected_profile, font=("Consolas", 12), state="readonly", width=55)
+-    profile_menu.grid(row=0, column=2, padx=5, sticky="w")
++    profile_menu = ttk.Combobox(controls_frame, textvariable=selected_profile, font=FONT, state="readonly", width=36)
++    profile_menu.grid(row=1, column=2, padx=(0, 10), pady=4, sticky="ew")
+ 
+-    refresh_button = ttk.Button(profile_frame, text="Refresh Instances", command=refresh_instances, style="Action.TButton")
+-    refresh_button.grid(row=0, column=3, padx=5, sticky="e")
++    refresh_button = ttk.Button(controls_frame, text="Refresh", command=refresh_instances, style="Action.TButton")
++    refresh_button.grid(row=1, column=3, padx=(0, 8), pady=4, sticky="ew")
+ 
+-    sync_button = ttk.Button(profile_frame, text="Sync Account IDs", command=sync_account_ids_async, style="Action.TButton")
+-    sync_button.grid(row=0, column=4, padx=5, sticky="e")
++    sync_button = ttk.Button(controls_frame, text="Sync IDs", command=sync_account_ids_async, style="TButton")
++    sync_button.grid(row=1, column=4, padx=(0, 0), pady=4, sticky="ew")
+ 
+     profiles = get_profiles()
+     if profiles:
+@@ -764,56 +801,72 @@ def main():
+     else:
+         messagebox.showerror("Wake Up!!!", "No se encontraron perfiles de AWS configurados.")
+ 
+-    instance_frame = tk.Frame(powercon_frame, bg="black")
+-    instance_frame.place(x=20, y=60, relwidth=0.95)
+-
+-    instance_search_label = tk.Label(instance_frame, text="Search instances:", font=("Consolas", 12), bg="black", fg="yellow")
+-    instance_search_label.grid(row=1, column=0, padx=5, sticky="w")
++    instance_search_label = tk.Label(controls_frame, text="Instance", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
++    instance_search_label.grid(row=2, column=0, padx=(0, 8), pady=(8, 0), sticky="w")
+ 
+-    instance_search_entry = tk.Entry(instance_frame, font=("Consolas", 12), width=30, bg="white", fg="black", insertbackground="black")
+-    instance_search_entry.grid(row=1, column=1, padx=5, sticky="w")
++    instance_search_entry = tk.Entry(controls_frame, font=FONT, width=26, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
++    instance_search_entry.grid(row=2, column=1, padx=(0, 10), pady=(8, 0), sticky="ew")
+     instance_search_entry.bind("<KeyRelease>", filter_instances)
+ 
+-    connect_button = ttk.Button(instance_frame, text="Connection", command=connect_selected_instances, style="Action.TButton")
+-    connect_button.grid(row=1, column=2, padx=5, sticky="e")
++    connect_button = ttk.Button(controls_frame, text="Connect", command=connect_selected_instances, style="Action.TButton")
++    connect_button.grid(row=2, column=2, padx=(0, 10), pady=(8, 0), sticky="w")
+ 
+-    banner_label = tk.Label(instance_frame, text=f"       * {APP_NAME} on AmazonSpiceOx *        region: {DEFAULT_REGION}        ", font=("Consolas", 12), bg="black", fg="yellow")
+-    banner_label.grid(row=1, column=3, padx=5, sticky="w")
++    banner_label = tk.Label(controls_frame, text="AWS SSM operations from arrakis", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
++    banner_label.grid(row=2, column=3, columnspan=3, padx=(0, 0), pady=(8, 0), sticky="e")
+ 
+-    tree_frame = ttk.Frame(powercon_frame, style="TFrame")
+-    tree_frame.place(x=20, y=120, relwidth=0.95, relheight=0.7)
++    tree_frame = tk.Frame(powercon_frame, bg=PANEL_COLOR, padx=1, pady=1)
++    tree_frame.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
++    tree_frame.grid_columnconfigure(0, weight=1)
++    tree_frame.grid_rowconfigure(0, weight=1)
+ 
+     tree = ttk.Treeview(tree_frame, columns=("Name", "InstanceID", "PrivateIP", "InstanceState"), show="headings", style="Treeview")
+     tree.heading("Name", text="Name")
+     tree.heading("InstanceID", text="Instance ID")
+     tree.heading("PrivateIP", text="Private IP")
+     tree.heading("InstanceState", text="State")
+-    tree.pack(expand=True, fill="both")
+-
+-    tk.Label(powertunnel_frame, text="Local Port:", font=("Consolas", 13), bg="#1E1E1E", fg="yellow").pack(pady=7)
+-    localport_entry = tk.Entry(powertunnel_frame, font=("Consolas", 13), bg="white", fg="black", insertbackground="black")
+-    localport_entry.pack(pady=5)
+-
+-    tk.Label(powertunnel_frame, text="Remote Port:", font=("Consolas", 13), bg="#1E1E1E", fg="yellow").pack(pady=7)
+-    remoteport_entry = tk.Entry(powertunnel_frame, font=("Consolas", 13), bg="white", fg="black", insertbackground="black")
+-    remoteport_entry.pack(pady=5)
+-
+-    tk.Button(powertunnel_frame, text="Start Tunnel", command=open_tunnel_with_terminal, font=("Consolas", 13), bg="black", fg="white", activebackground="#222222", activeforeground="white").pack(pady=7)
+-
+-    tk.Label(powercommand_frame, text="Command:", font=("Consolas", 13), bg="#1E1E1E", fg="yellow").pack(pady=6)
+-    command_input = tk.Text(powercommand_frame, height=7, width=145, font=("Consolas", 12), bg="black", fg="white")
+-    command_input.pack(pady=5)
+-
+-    tk.Button(powercommand_frame, text="Send command", command=invocation, font=("Consolas", 13), bg="black", fg="white", activebackground="#222222", activeforeground="white").pack(pady=6)
+-
+-    command_output = tk.Text(powercommand_frame, height=38, width=145, font=("Consolas", 12), bg="black", fg="#258EFE", state="disabled")
+-    command_output.pack(pady=5)
+-
+-    tk.Label(powerebs_frame, text="EBS Data Analysis", font=("Consolas", 13), bg="#1E1E1E", fg="yellow").pack(pady=6)
+-    tk.Button(powerebs_frame, text="Create Dashboard", command=ebs_analysis, font=("Consolas", 12), bg="black", fg="white", activebackground="#222222", activeforeground="white").pack(pady=6)
+-    tk.Button(powerebs_frame, text="Select CSV file", command=seleccionar_archivo, font=("Consolas", 12), bg="black", fg="white", activebackground="#222222", activeforeground="white").pack(pady=6)
+-    analysis_output = tk.Text(powerebs_frame, height=40, width=120, font=("Consolas", 12), bg="black", fg="white", insertbackground="white")
+-    analysis_output.pack(padx=20, pady=10)
++    tree.column("Name", width=430, minwidth=220, anchor="w")
++    tree.column("InstanceID", width=210, minwidth=170, anchor="w")
++    tree.column("PrivateIP", width=150, minwidth=120, anchor="w")
++    tree.column("InstanceState", width=140, minwidth=110, anchor="center")
++    tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
++    tree.configure(yscrollcommand=tree_scroll.set)
++    tree.grid(row=0, column=0, sticky="nsew")
++    tree_scroll.grid(row=0, column=1, sticky="ns")
++
++    tunnel_panel = tk.Frame(powertunnel_frame, bg=PANEL_COLOR, padx=24, pady=24)
++    tunnel_panel.pack(anchor="n", fill="x", padx=18, pady=18)
++    tunnel_panel.grid_columnconfigure(1, weight=1)
++    tk.Label(tunnel_panel, text="Port forwarding", font=FONT_TITLE, bg=PANEL_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, columnspan=3, pady=(0, 14), sticky="w")
++    tk.Label(tunnel_panel, text="Local port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=1, column=0, padx=(0, 12), pady=6, sticky="w")
++    localport_entry = tk.Entry(tunnel_panel, font=FONT, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
++    localport_entry.grid(row=1, column=1, padx=(0, 12), pady=6, sticky="ew")
++    tk.Label(tunnel_panel, text="Remote port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=2, column=0, padx=(0, 12), pady=6, sticky="w")
++    remoteport_entry = tk.Entry(tunnel_panel, font=FONT, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
++    remoteport_entry.grid(row=2, column=1, padx=(0, 12), pady=6, sticky="ew")
++    ttk.Button(tunnel_panel, text="Start tunnel", command=open_tunnel_with_terminal, style="Action.TButton").grid(row=1, column=2, rowspan=2, padx=(8, 0), pady=6, sticky="ns")
++
++    powercommand_frame.grid_columnconfigure(0, weight=1)
++    powercommand_frame.grid_rowconfigure(2, weight=1)
++    command_panel = tk.Frame(powercommand_frame, bg=BG_COLOR)
++    command_panel.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
++    command_panel.grid_columnconfigure(0, weight=1)
++    tk.Label(command_panel, text="Command", font=FONT_TITLE, bg=BG_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
++    ttk.Button(command_panel, text="Send command", command=invocation, style="Action.TButton").grid(row=0, column=1, sticky="e")
++    command_input = tk.Text(powercommand_frame, height=6, font=FONT, bg=PANEL_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR, relief="flat", padx=10, pady=8)
++    command_input.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
++    command_output = tk.Text(powercommand_frame, font=FONT, bg=PANEL_COLOR, fg=LINK_COLOR, state="disabled", relief="flat", padx=10, pady=8)
++    command_output.grid(row=2, column=0, sticky="nsew", padx=14, pady=(0, 14))
++
++    powerebs_frame.grid_columnconfigure(0, weight=1)
++    powerebs_frame.grid_rowconfigure(1, weight=1)
++    ebs_toolbar = tk.Frame(powerebs_frame, bg=BG_COLOR)
++    ebs_toolbar.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 10))
++    ebs_toolbar.grid_columnconfigure(0, weight=1)
++    tk.Label(ebs_toolbar, text="EBS data analysis", font=FONT_TITLE, bg=BG_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
++    ttk.Button(ebs_toolbar, text="Create dashboard", command=ebs_analysis, style="Action.TButton").grid(row=0, column=1, padx=(0, 8), sticky="e")
++    ttk.Button(ebs_toolbar, text="Select CSV", command=seleccionar_archivo, style="TButton").grid(row=0, column=2, sticky="e")
++    analysis_output = tk.Text(powerebs_frame, font=FONT, bg=PANEL_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR, relief="flat", padx=10, pady=8)
++    analysis_output.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
+ 
+     root.mainloop()
+ 

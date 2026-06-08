@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+app_home="${SSM_POWERCONNECT_HOME:-/opt/ssm-powerconnect}"
+app_file="$app_home/ssm_powerconnect.py"
+
+if [ ! -f "$app_file" ]; then
+    echo "ssm-powerconnect: missing app file: $app_file" >&2
+    exit 1
+fi
+
+if command -v python-gui >/dev/null 2>&1; then
+    exec python-gui "$app_file" "$@"
+fi
+
+exec python3 "$app_file" "$@"

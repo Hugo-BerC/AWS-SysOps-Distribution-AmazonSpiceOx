@@ -88,13 +88,76 @@ cleanup_chroot_network() {
     umount "$root/proc" 2>/dev/null || true
 }
 
+install_policy_rc_d() {
+    root="$1"
+    policy_path="$root/usr/sbin/policy-rc.d"
+    backup_path="$root/usr/sbin/policy-rc.d.amazonspiceox-pre-post"
+
+    mkdir -p "$root/usr/sbin"
+
+    if [ -e "$policy_path" ] && [ ! -e "$backup_path" ]; then
+        mv "$policy_path" "$backup_path"
+    fi
+
+    cat > "$policy_path" <<'EOF'
+#!/bin/sh
+exit 101
+EOF
+    chmod 0755 "$policy_path"
+}
+
+cleanup_policy_rc_d() {
+    root="$1"
+    policy_path="$root/usr/sbin/policy-rc.d"
+    backup_path="$root/usr/sbin/policy-rc.d.amazonspiceox-pre-post"
+
+    if [ -e "$backup_path" ]; then
+        mv "$backup_path" "$policy_path"
+    else
+        rm -f "$policy_path"
+    fi
+}
+
+install_post_bootstrap_sources() {
+    root="$1"
+    sources_path="$root/etc/apt/sources.list"
+    backup_path="$root/etc/apt/sources.list.amazonspiceox-pre-post"
+
+    mkdir -p "$root/etc/apt"
+
+    if [ -f "$sources_path" ] && [ ! -e "$backup_path" ]; then
+        cp -a "$sources_path" "$backup_path"
+    fi
+
+    cat > "$sources_path" <<EOF
+deb $mirror $suite main
+EOF
+}
+
+cleanup_post_bootstrap_sources() {
+    root="$1"
+    sources_path="$root/etc/apt/sources.list"
+    backup_path="$root/etc/apt/sources.list.amazonspiceox-pre-post"
+
+    if [ -f "$backup_path" ]; then
+        mv "$backup_path" "$sources_path"
+    fi
+}
+
 install_post_packages() {
     root="$1"
-    source_list="$2"
+    _source_list="$2"
     manifests="$3"
 
     set -- $manifests
     [ "$#" -gt 0 ] || return 0
+
+    for post_manifest in "$@"; do
+        if [ ! -f "$post_manifest" ]; then
+            echo "error: post-bootstrap manifest not found: $post_manifest" >&2
+            exit 1
+        fi
+    done
 
     post_include_list="$(resolve_package_list "$@")"
     [ -n "$post_include_list" ] || return 0
@@ -102,13 +165,16 @@ install_post_packages() {
     echo "Installing post-bootstrap packages into $root: $post_include_list"
 
     prepare_chroot_network "$root"
-    trap 'cleanup_chroot_network "$root"' EXIT INT TERM
+    install_policy_rc_d "$root"
+    install_post_bootstrap_sources "$root"
+    trap 'cleanup_policy_rc_d "$root"; cleanup_post_bootstrap_sources "$root"; cleanup_chroot_network "$root"' EXIT INT TERM
 
-    cp "$source_list" "$root/etc/apt/sources.list"
     chroot "$root" /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get update
     chroot "$root" /usr/bin/env DEBIAN_FRONTEND=noninteractive \
         apt-get install -y --no-install-recommends $(printf '%s\n' "$post_include_list" | tr ',' ' ')
 
+    cleanup_policy_rc_d "$root"
+    cleanup_post_bootstrap_sources "$root"
     cleanup_chroot_network "$root"
     trap - EXIT INT TERM
 }
@@ -133,7 +199,9 @@ install_external_debs() {
 
     echo "Installing external deb packages into $root"
     prepare_chroot_network "$root"
-    trap 'cleanup_chroot_network "$root"' EXIT INT TERM
+    install_policy_rc_d "$root"
+    install_post_bootstrap_sources "$root"
+    trap 'cleanup_policy_rc_d "$root"; cleanup_post_bootstrap_sources "$root"; cleanup_chroot_network "$root"' EXIT INT TERM
 
     for deb_package in "$@"; do
         deb_basename="$(basename "$deb_package")"
@@ -143,6 +211,8 @@ install_external_debs() {
                 apt-get install -y --no-install-recommends -f
     done
 
+    cleanup_policy_rc_d "$root"
+    cleanup_post_bootstrap_sources "$root"
     cleanup_chroot_network "$root"
     trap - EXIT INT TERM
 }
@@ -186,6 +256,28 @@ install_external_rootfs_files() {
     done
 
     IFS="$old_ifs"
+}
+
+validate_profile_artifacts() {
+    root="$1"
+    profile="$2"
+
+    case "+$profile+" in
+        *+docker+*)
+            if [ ! -x "$root/usr/bin/docker" ] && [ ! -x "$root/usr/bin/docker.io" ]; then
+                echo "error: docker profile selected, but Docker CLI is missing from rootfs" >&2
+                echo "error: expected docker-cli post-bootstrap installation to provide /usr/bin/docker or /usr/bin/docker.io" >&2
+                echo "error: post-bootstrap manifests: ${post_manifests:-<none>}" >&2
+
+                if [ -x "$root/usr/bin/dpkg-query" ]; then
+                    echo "error: package status for docker runtime packages:" >&2
+                    chroot "$root" /usr/bin/dpkg-query -W docker-cli docker.io containerd runc >&2 || true
+                fi
+
+                exit 1
+            fi
+            ;;
+    esac
 }
 
 if [ "$#" -eq 0 ]; then
@@ -281,6 +373,14 @@ if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/kubectl.sh" ]; then
     chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/kubectl.sh"
 fi
 
+if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/docker.sh" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/docker.sh"
+fi
+
+if [ -f "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/ssm-powerconnect.sh" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/lib/amazonspiceox/smoke/ssm-powerconnect.sh"
+fi
+
 if [ -f "$rootfs_dir/usr/local/bin/terraform" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/terraform"
 fi
@@ -301,8 +401,28 @@ if [ -f "$rootfs_dir/usr/local/bin/asox-netcheck" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-netcheck"
 fi
 
+if [ -f "$rootfs_dir/usr/local/bin/asox-console" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-console"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/docker-start" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/docker-start"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/docker" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/docker"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/docker-status" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/docker-status"
+fi
+
 if [ -f "$rootfs_dir/usr/local/bin/asox-xsession" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-xsession"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/asox-terminal" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-terminal"
 fi
 
 if [ -f "$rootfs_dir/usr/local/bin/gui-run" ]; then
@@ -324,6 +444,12 @@ fi
 if [ -f "$rootfs_dir/usr/local/bin/gui-doctor" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/gui-doctor"
 fi
+
+if [ -f "$rootfs_dir/usr/local/bin/ssm-powerconnect" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/ssm-powerconnect"
+fi
+
+validate_profile_artifacts "$rootfs_dir" "$profile_name"
 
 chmod 0700 "$rootfs_dir/root"
 chmod 1777 "$rootfs_dir/tmp"

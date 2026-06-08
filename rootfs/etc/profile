@@ -1,5 +1,7 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin
 export PS1='arrakis:\w# '
+export ASOX_KEYBOARD_LAYOUT="${ASOX_KEYBOARD_LAYOUT:-es}"
+export ASOX_TERMINAL_SCROLLBACK="${ASOX_TERMINAL_SCROLLBACK:-20000}"
 
 if [ -d /etc/profile.d ]; then
     for profile_script in /etc/profile.d/*.sh; do

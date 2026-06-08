@@ -2,6 +2,60 @@
 
 All notable progress in AmazonSpiceOx is tracked here.
 
+## 2026-06-07 - First Release Packaging
+
+Implemented:
+
+- `RELEASE_VERSION` and `ASOX_RELEASE_PROFILES` Makefile controls
+- first complete release profile default:
+  `base ops aws awscli ssm terraform kubectl docker ssm-powerconnect`
+- `docker` profile with Debian `docker-cli` plus `docker.io`, `docker-start`,
+  `docker-status`, cgroup v2 setup, and `make smoke-docker`
+- `asox-console` backed by `tmux` for a usable scrollback buffer on the serial
+  console
+- `make release`, `make release-package`, and `make release-package-only`
+- `scripts/build-release.sh` to create a self-contained QEMU bundle under
+  `out/release/`
+- release `run.sh`, `run-gui.sh`, `BUILDINFO`, `SHA256SUMS`, and compressed
+  `.tar.gz` package generation
+- release packaging guard that refuses images containing common AWS local state
+  paths under `/root/.aws`
+- manual GitHub Actions release workflow that uploads the release tarball as an
+  artifact
+- `docs/release.md`
+
+Notes:
+
+- the first release workflow uploads artifacts for manual inspection rather
+  than publishing a GitHub Release automatically
+- release images should be rebuilt from clean generated rootfs output before
+  packaging
+- Docker daemon startup is manual in this non-systemd guest:
+  run `docker-start` inside arrakis when you need containers
+
+## 2026-06-07 - SSM-PowerConnect App Profile
+
+Implemented:
+
+- `ssm-powerconnect` as a composite profile for the Tkinter AWS SSM desktop
+  tool
+- automatic profile implication for `gui`, `aws`, `awscli`, and `ssm` when
+  `ssm-powerconnect` is selected
+- GitHub-backed fetch of the `AmazonSpiceOx/` app folder from
+  `Hugo-BerC/SSM-PowerConnect`
+- installation of the app into `/opt/ssm-powerconnect`
+- `/usr/local/bin/ssm-powerconnect` guest launcher through `python-gui`
+- `make smoke-ssm-powerconnect` and `make smoke-ssm-powerconnect-only`
+- AmazonSpiceOx UI polish patch for the app: cleaner dark layout, no stretched
+  background image, stable PowerCon controls, and scrollable instance table
+
+Notes:
+
+- the smoke validates the launcher, app files, Python imports, and syntax
+  without opening a GUI window
+- runtime GUI behavior follows the existing `gui-run` / `python-gui` backend
+  model
+
 ## 2026-06-05 - Minimal GUI Guest Layer
 
 Implemented:
@@ -88,9 +142,9 @@ Notes:
 
 - the RPM-world `bind-utils` name maps to `bind9-dnsutils` in Debian
 - `telnet` is best represented by `inetutils-telnet` in current Debian
-- `terraform`, `kubectl`, and `docker` are intentionally kept out of the
-  Debian-only profile slice because they need either version pinning, upstream
-  repositories, or additional service-management work
+- `terraform`, `kubectl`, and `docker` were intentionally kept out of this
+  Debian-only profile slice because they needed either version pinning,
+  upstream repositories, or additional service-management work
 
 ## 2026-06-05 - Terraform External Profile
 

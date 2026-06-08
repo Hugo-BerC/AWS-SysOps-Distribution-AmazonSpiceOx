@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+
+echo "Docker profile: ${AMAZONSPICEOX_DOCKER_PROFILE:-0}"
+echo "DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}"
+echo
+
+if command -v docker >/dev/null 2>&1; then
+    docker --version || true
+else
+    echo "docker: not found"
+fi
+
+if command -v dockerd >/dev/null 2>&1; then
+    dockerd --version || true
+else
+    echo "dockerd: not found"
+fi
+
+if grep -qs " /sys/fs/cgroup " /proc/mounts 2>/dev/null; then
+    echo "cgroup mount: present"
+else
+    echo "cgroup mount: missing"
+fi
+
+if docker info >/dev/null 2>&1; then
+    echo
+    docker info
+else
+    echo
+    echo "Docker daemon: not reachable"
+    echo "Start it with: docker-start"
+fi

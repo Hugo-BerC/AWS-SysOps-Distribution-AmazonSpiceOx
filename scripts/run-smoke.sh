@@ -101,6 +101,26 @@ list_guest_dir() {
     return 1
 }
 
+guest_path_exists() {
+    image_path="$1"
+    guest_path="$2"
+    rel_path="${guest_path#/}"
+    stderr_file="$(mktemp)"
+
+    if debugfs_capture "$image_path" "stat $guest_path" "$stderr_file"; then
+        rm -f "$stderr_file"
+        return 0
+    fi
+
+    if debugfs_capture "$image_path" "stat $rel_path" "$stderr_file"; then
+        rm -f "$stderr_file"
+        return 0
+    fi
+
+    rm -f "$stderr_file"
+    return 1
+}
+
 repair_guest_fs() {
     image_path="$1"
 
@@ -140,9 +160,10 @@ show_guest_smoke_failure() {
 mkdir -p "$(dirname "$log_path")"
 
 actual_log_path="$log_path"
-if ! : > "$actual_log_path" 2>/dev/null; then
+if ! ( : > "$actual_log_path" ) 2>/dev/null; then
     actual_log_path="$(mktemp)"
     echo "warning: could not write to $log_path; using temporary log $actual_log_path" >&2
+    echo "hint: fix workspace ownership with sudo chown -R \"\$USER:\$USER\" \"$(dirname "$log_path")\"" >&2
 fi
 
 diag_log_path="$(mktemp)"
@@ -163,6 +184,12 @@ case "$mode" in
     kubectl)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=kubectl"
         ;;
+    docker)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=docker"
+        ;;
+    ssm-powerconnect)
+        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=ssm-powerconnect"
+        ;;
     net|network)
         append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=network"
         ;;
@@ -178,6 +205,18 @@ esac
 echo "smoke: mode=$mode timeout=$timeout_value marker=$marker" >&2
 echo "smoke: kernel=$kernel_image initramfs=$initramfs_image rootfs=$rootfs_image" >&2
 echo "smoke: requested log path=$log_path" >&2
+
+if [ "$mode" = "docker" ] && command -v debugfs >/dev/null 2>&1; then
+    if ! guest_path_exists "$rootfs_image" /usr/local/bin/docker \
+        && ! guest_path_exists "$rootfs_image" /usr/bin/docker \
+        && ! guest_path_exists "$rootfs_image" /usr/bin/docker.io; then
+        echo "smoke: Docker CLI missing from rootfs image" >&2
+        echo "smoke: expected /usr/local/bin/docker, /usr/bin/docker, or /usr/bin/docker.io" >&2
+        echo "smoke: this usually means the ext4 image was built before the docker post-bootstrap packages or overlay were installed" >&2
+        echo "smoke: rebuild rootfs and image with ASOX_PROFILES including docker, then rerun smoke-docker-only" >&2
+        exit 1
+    fi
+fi
 
 status=0
 QEMU_MEMORY="${QEMU_MEMORY:-512M}" \
@@ -197,7 +236,7 @@ fi
 
 marker_found=0
 
-if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ] || [ "$mode" = "awscli" ] || [ "$mode" = "ssm" ] || [ "$mode" = "terraform" ] || [ "$mode" = "kubectl" ]; then
+if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ] || [ "$mode" = "awscli" ] || [ "$mode" = "ssm" ] || [ "$mode" = "terraform" ] || [ "$mode" = "kubectl" ] || [ "$mode" = "docker" ] || [ "$mode" = "ssm-powerconnect" ]; then
     repair_guest_fs "$rootfs_image"
 
     if [ "$mode" = "apt" ]; then
@@ -208,6 +247,14 @@ if [ "$mode" = "apt" ] || [ "$mode" = "net" ] || [ "$mode" = "network" ] || [ "$
         guest_status_path="/var/lib/amazonspiceox/smoke/kubectl.status"
         guest_log_path="/var/log/kubectl-smoke.log"
         guest_label="kubectl"
+    elif [ "$mode" = "ssm-powerconnect" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/ssm-powerconnect.status"
+        guest_log_path="/var/log/ssm-powerconnect-smoke.log"
+        guest_label="ssm-powerconnect"
+    elif [ "$mode" = "docker" ]; then
+        guest_status_path="/var/lib/amazonspiceox/smoke/docker.status"
+        guest_log_path="/var/log/docker-smoke.log"
+        guest_label="docker"
     elif [ "$mode" = "terraform" ]; then
         guest_status_path="/var/lib/amazonspiceox/smoke/terraform.status"
         guest_log_path="/var/log/terraform-smoke.log"

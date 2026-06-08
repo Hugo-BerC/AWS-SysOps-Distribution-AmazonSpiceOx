@@ -1,0 +1,70 @@
+#!/bin/sh
+set -eu
+
+LOG_FILE="${DOCKER_LOG_FILE:-/var/log/docker.log}"
+SOCKET_PATH=/var/run/docker.sock
+STORAGE_DRIVER="${DOCKER_STORAGE_DRIVER:-vfs}"
+IPTABLES="${DOCKER_IPTABLES:-true}"
+WAIT_SECONDS="${DOCKER_WAIT_SECONDS:-20}"
+
+ensure_cgroup2() {
+    mkdir -p /sys/fs/cgroup
+
+    if grep -qs " /sys/fs/cgroup " /proc/mounts 2>/dev/null; then
+        return 0
+    fi
+
+    mount -t cgroup2 cgroup2 /sys/fs/cgroup >/tmp/docker-cgroup2.log 2>&1 || true
+}
+
+daemon_alive() {
+    docker info >/dev/null 2>&1
+}
+
+if [ "$(id -u)" != "0" ]; then
+    echo "docker-start: run as root inside AmazonSpiceOx" >&2
+    exit 1
+fi
+
+if ! command -v dockerd >/dev/null 2>&1; then
+    echo "docker-start: dockerd not found" >&2
+    exit 1
+fi
+
+mkdir -p /var/run /var/lib/docker /var/log
+ensure_cgroup2
+
+if daemon_alive; then
+    echo "docker-start: Docker daemon is already running"
+    exit 0
+fi
+
+if [ -S "$SOCKET_PATH" ]; then
+    rm -f "$SOCKET_PATH"
+fi
+
+echo "docker-start: starting dockerd"
+echo "docker-start: log file $LOG_FILE"
+
+nohup dockerd \
+    --host=unix://"$SOCKET_PATH" \
+    --data-root=/var/lib/docker \
+    --storage-driver="$STORAGE_DRIVER" \
+    --iptables="$IPTABLES" \
+    > "$LOG_FILE" 2>&1 &
+
+count=0
+while [ "$count" -lt "$WAIT_SECONDS" ]; do
+    if daemon_alive; then
+        echo "docker-start: Docker daemon is ready"
+        exit 0
+    fi
+    count=$((count + 1))
+    sleep 1
+done
+
+echo "docker-start: Docker daemon did not become ready in ${WAIT_SECONDS}s" >&2
+echo "docker-start: if the log points at iptables, try DOCKER_IPTABLES=false docker-start" >&2
+echo "docker-start: last log lines:" >&2
+tail -n 80 "$LOG_FILE" >&2 || true
+exit 1
