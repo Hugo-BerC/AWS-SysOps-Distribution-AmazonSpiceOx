@@ -10,13 +10,36 @@ Implemented:
   to the guest instead of killing QEMU
 - stage-2 login shells now `cd` into the active user's home directory and
   normalize basic TTY control keys before launching Bash
+- stage-2 interactive shell now starts on the serial TTY with a controlling
+  terminal, improving Bash job control, `Ctrl+C`, `Ctrl+Z`, and readline
+- exiting the normal interactive shell now powers off the guest instead of
+  respawning an apparently unkillable shell
 - base profile now includes `sudo` and `bash-completion`
 - root profile sources Bash completion when available
+- terminal defaults now prefer `xterm-256color`, disable XON/XOFF flow control,
+  and include `ncurses-term` for richer terminfo support
+- Vim defaults now include sane Backspace/Escape timing, visible command
+  feedback, no terminal mouse capture by default, and a root `.vimrc`
+- `asox-termcheck` prints TTY, `TERM`, `stty`, terminfo, and Vim diagnostics
 - `sudoers.d` policy for root and future `sudo` group users
+- rootfs overlay copies no longer preserve host UID/GID ownership, and sudo
+  files are normalized to root ownership and setuid-safe permissions
 - QEMU host gateway aliases:
   `host.qemu.internal`, `host.local`, `host.docker.internal`, and
   `host.containers.internal`
+- WSL launches now add detected Windows host aliases:
+  `host.os.internal`, `host.windows.internal`, and `host.wsl.internal`
+- `QEMU_ACCEL=auto` enables KVM/HVF when available, with TCG fallback
+- `QEMU_HOSTFWD_EXTRA` allows user-defined host-to-guest port forwards without
+  overriding profile-provided forwards
+- GUI profile now includes `spice-vdagent`, and QEMU enables vdagent clipboard
+  support automatically when available
+- GUI profile now includes `xclip` and `asox-clipboard` for clipboard
+  diagnostics and a hidden-prompt fallback when host clipboard sync is not
+  available
 - network smoke now validates the host gateway alias
+- AWS CLI smoke now uses temporary empty AWS config and credentials files, so
+  stale local `/root/.aws` state cannot break release validation
 - GUI profile now defaults `ASOX_GUI_BACKEND=auto`
 - `asox-browser`, `xdg-open`, `x-www-browser`, and `sensible-browser` wrappers
   route browser launches to Chromium for AWS SSO and other auth flows

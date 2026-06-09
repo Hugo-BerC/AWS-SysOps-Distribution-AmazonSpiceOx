@@ -1,0 +1,73 @@
+#!/bin/sh
+set -eu
+
+command_name="${1:-doctor}"
+display_value="${DISPLAY:-:0}"
+
+print_status() {
+    echo "DISPLAY=${DISPLAY:-<unset>}"
+    echo "effective DISPLAY for xclip=$display_value"
+    echo
+
+    echo "[virtio port]"
+    if [ -e /dev/virtio-ports/com.redhat.spice.0 ]; then
+        ls -l /dev/virtio-ports/com.redhat.spice.0
+    else
+        echo "missing: /dev/virtio-ports/com.redhat.spice.0"
+    fi
+    echo
+
+    echo "[spice processes]"
+    ps w 2>/dev/null | grep '[s]pice-vdagent' || true
+    echo
+
+    echo "[xclip]"
+    command -v xclip || true
+    echo
+}
+
+set_clipboard() {
+    if ! command -v xclip >/dev/null 2>&1; then
+        echo "asox-clipboard: xclip is not installed" >&2
+        exit 1
+    fi
+
+    if [ -t 0 ]; then
+        printf 'Paste text, then press Enter: ' >&2
+        old_stty="$(stty -g 2>/dev/null || true)"
+        stty -echo 2>/dev/null || true
+        IFS= read -r clipboard_text || clipboard_text=""
+        [ -n "$old_stty" ] && stty "$old_stty" 2>/dev/null || true
+        printf '\n' >&2
+        printf '%s' "$clipboard_text" | DISPLAY="$display_value" xclip -selection clipboard
+    else
+        DISPLAY="$display_value" xclip -selection clipboard
+    fi
+
+    echo "asox-clipboard: guest X11 clipboard updated"
+}
+
+read_clipboard() {
+    if ! command -v xclip >/dev/null 2>&1; then
+        echo "asox-clipboard: xclip is not installed" >&2
+        exit 1
+    fi
+
+    DISPLAY="$display_value" xclip -selection clipboard -o
+}
+
+case "$command_name" in
+    doctor|status)
+        print_status
+        ;;
+    set)
+        set_clipboard
+        ;;
+    get|read)
+        read_clipboard
+        ;;
+    *)
+        echo "usage: asox-clipboard [doctor|set|get]" >&2
+        exit 1
+        ;;
+esac

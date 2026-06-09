@@ -1,0 +1,20 @@
+" AmazonSpiceOx Vim defaults for serial QEMU and guest xterm sessions.
+set nocompatible
+set backspace=indent,eol,start
+set hidden
+set ruler
+set showcmd
+set ttyfast
+set timeout
+set timeoutlen=1000
+set ttimeout
+set ttimeoutlen=50
+set mouse=
+
+if &term ==# 'xterm' || &term ==# 'xterm-256color' || &term ==# 'screen-256color'
+  set t_Co=256
+endif
+
+if has('syntax')
+  syntax on
+endif

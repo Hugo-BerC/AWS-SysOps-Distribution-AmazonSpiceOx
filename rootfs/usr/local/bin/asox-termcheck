@@ -1,0 +1,31 @@
+#!/bin/sh
+set -eu
+
+echo "[asox-termcheck] tty"
+tty 2>/dev/null || true
+echo
+
+echo "[asox-termcheck] TERM"
+printf '%s\n' "${TERM:-<unset>}"
+echo
+
+echo "[asox-termcheck] stty"
+stty -a 2>/dev/null || true
+echo
+
+echo "[asox-termcheck] terminfo"
+if command -v infocmp >/dev/null 2>&1; then
+    infocmp "${TERM:-xterm-256color}" >/dev/null 2>&1 \
+        && echo "terminfo ok: ${TERM:-xterm-256color}" \
+        || echo "terminfo missing or invalid: ${TERM:-<unset>}"
+else
+    echo "infocmp not installed"
+fi
+echo
+
+echo "[asox-termcheck] vim"
+if command -v vim >/dev/null 2>&1; then
+    vim --version | sed -n '1,3p'
+else
+    echo "vim not installed"
+fi

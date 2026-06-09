@@ -79,6 +79,11 @@ set -eu
 DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
 
 QEMU_MEMORY="\${QEMU_MEMORY:-$qemu_memory}" \\
+QEMU_HOSTFWD="\${QEMU_HOSTFWD:-}" \\
+QEMU_ACCEL="\${QEMU_ACCEL:-auto}" \\
+QEMU_CPU="\${QEMU_CPU:-auto}" \\
+QEMU_SMP="\${QEMU_SMP:-2}" \\
+QEMU_HOST_IP="\${QEMU_HOST_IP:-auto}" \\
 QEMU_APPEND="\${QEMU_APPEND:-$qemu_append}" \\
 sh "\$DIR/scripts/run-qemu.sh" "\$DIR/bzImage" "\$DIR/rootfs.cpio.gz" "\$DIR/rootfs.ext4"
 EOF
@@ -91,9 +96,15 @@ DIR=\$(CDPATH= cd -- "\$(dirname -- "\$0")" && pwd)
 
 QEMU_GUI=1 \\
 QEMU_MEMORY="\${QEMU_MEMORY:-$qemu_memory}" \\
+QEMU_HOSTFWD="\${QEMU_HOSTFWD:-}" \\
 QEMU_DISPLAY="\${QEMU_DISPLAY:-gtk,gl=off}" \\
 QEMU_VGA="\${QEMU_VGA:-std}" \\
 QEMU_KEYBOARD_LAYOUT="\${QEMU_KEYBOARD_LAYOUT:-$qemu_keyboard_layout}" \\
+QEMU_ACCEL="\${QEMU_ACCEL:-auto}" \\
+QEMU_CPU="\${QEMU_CPU:-auto}" \\
+QEMU_SMP="\${QEMU_SMP:-2}" \\
+QEMU_CLIPBOARD="\${QEMU_CLIPBOARD:-auto}" \\
+QEMU_HOST_IP="\${QEMU_HOST_IP:-auto}" \\
 QEMU_APPEND="\${QEMU_APPEND:-$qemu_append}" \\
 sh "\$DIR/scripts/run-qemu.sh" "\$DIR/bzImage" "\$DIR/rootfs.cpio.gz" "\$DIR/rootfs.ext4"
 EOF
@@ -163,6 +174,30 @@ host.local
 host.docker.internal
 host.containers.internal
 \`\`\`
+
+When launched from WSL, the wrapper also adds detected Windows host aliases:
+
+\`\`\`text
+host.os.internal
+host.windows.internal
+host.wsl.internal
+\`\`\`
+
+For host-to-guest port forwarding, pass QEMU hostfwd rules:
+
+\`\`\`sh
+QEMU_HOSTFWD="tcp:127.0.0.1:2222-:22" sh run.sh
+\`\`\`
+
+QEMU acceleration defaults to auto-detection:
+
+\`\`\`sh
+QEMU_ACCEL=auto sh run.sh
+QEMU_ACCEL=tcg sh run.sh
+\`\`\`
+
+Graphical clipboard support is enabled automatically when the host QEMU
+supports qemu-vdagent and the guest GUI profile is present.
 
 AWS SSO browser flows use Chromium through:
 

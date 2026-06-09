@@ -11,6 +11,10 @@ The default machine uses:
   reaches the guest.
 - no graphical display.
 - user-mode networking with a virtio network device.
+- automatic acceleration with KVM on Linux/WSL when `/dev/kvm` is usable, HVF
+  on macOS Intel, and TCG fallback.
+- optional graphical clipboard via QEMU vdagent when `QEMU_GUI=1` and the host
+  QEMU supports `qemu-vdagent`.
 
 Set `QEMU_DEBUG=1` to wait for a debugger on TCP port 1234:
 

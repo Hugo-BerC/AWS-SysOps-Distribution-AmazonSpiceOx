@@ -199,6 +199,9 @@ To exit QEMU cleanly from inside the guest:
 poweroff
 ```
 
+In the normal interactive shell, `exit` or `Ctrl+D` also asks the guest to
+power off.
+
 The serial console passes `Ctrl+C` through to the guest, so it behaves like a
 normal Linux interrupt instead of closing QEMU. If the guest is not responding,
 close the host terminal or stop the QEMU process from another terminal.
@@ -682,6 +685,16 @@ graphical terminal with `ASOX_GUI_BACKEND=local-x11 gui-run asox-terminal`.
 `asox-terminal` defaults to a dark xterm theme, larger geometry, and
 `xterm-256color`, which improves full-screen tools such as Vim.
 
+If Vim keys behave strangely, run:
+
+```bash
+asox-termcheck
+```
+
+AmazonSpiceOx defaults to `TERM=xterm-256color`, disables XON/XOFF flow control
+so `Ctrl+S` does not freeze the terminal, and ships Vim defaults for Backspace,
+Escape timing, and terminal key handling.
+
 For a better serial-console buffer, run:
 
 ```bash
@@ -691,6 +704,40 @@ asox-console
 That attaches to a `tmux` session with mouse support and a larger scrollback.
 Inside tmux, use `Ctrl+b` then `[` for copy/scroll mode, or the mouse wheel
 when your host terminal forwards mouse events.
+
+### QEMU Performance
+
+`scripts/run-qemu.sh` defaults `QEMU_ACCEL=auto`:
+
+- Linux/WSL uses KVM when `/dev/kvm` is available to the current user.
+- macOS Intel uses HVF.
+- everything else falls back to multi-threaded TCG emulation.
+
+Check acceleration from the host with:
+
+```bash
+ls -l /dev/kvm
+```
+
+If `/dev/kvm` is missing or not writable in WSL, QEMU will be much slower. You
+can add your Linux user to the `kvm` group, then restart WSL:
+
+```bash
+sudo usermod -aG kvm "$USER"
+```
+
+From PowerShell:
+
+```powershell
+wsl --shutdown
+```
+
+After reopening WSL, confirm that `id` shows `kvm`. You can force behavior with:
+
+```bash
+QEMU_ACCEL=kvm make run-only ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect"
+QEMU_ACCEL=tcg make run-only ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect"
+```
 
 ### Host Gateway
 
@@ -704,14 +751,62 @@ host.docker.internal
 host.containers.internal
 ```
 
+When QEMU runs from WSL, the launcher also detects the Windows host IP from
+WSL's resolver and adds:
+
+```text
+host.os.internal
+host.windows.internal
+host.wsl.internal
+```
+
 For a host service listening on port `8000`, test from arrakis with:
 
 ```bash
 curl http://host.qemu.internal:8000/
+curl http://host.windows.internal:8000/
 ```
 
 The service must listen on an address reachable from QEMU, not only on an
-unreachable loopback namespace.
+unreachable loopback namespace. On Windows, prefer binding test services to
+`0.0.0.0` or the Windows host IP instead of only `127.0.0.1`, and allow the
+port through the firewall.
+
+For host-to-guest access, use QEMU port forwarding:
+
+```bash
+QEMU_HOSTFWD_EXTRA="tcp:127.0.0.1:2222-:22" make run-only ASOX_PROFILES="base ops"
+```
+
+Run `asox-netcheck` inside arrakis to print all detected host aliases and basic
+connectivity checks.
+
+### Clipboard
+
+Serial console paste is controlled by the host terminal. In graphical mode,
+AmazonSpiceOx installs `spice-vdagent`, and QEMU enables the vdagent clipboard
+channel automatically when the host QEMU supports `qemu-vdagent`.
+
+Clipboard support applies to GUI sessions launched with `make run-gui-only` and
+guest X11 apps. It does not make the raw serial console behave like a desktop
+terminal emulator.
+
+Inside a GUI session, diagnose the channel with:
+
+```bash
+asox-clipboard doctor
+```
+
+Fallback for password fields when host clipboard sync is not working: open an
+`asox-terminal` inside the guest GUI and run:
+
+```bash
+asox-clipboard set
+```
+
+Paste the secret into the hidden prompt, press Enter, then focus Chromium and
+press `Ctrl+V`. This sets the guest X11 clipboard without echoing the value
+back to the terminal.
 
 ### Xpra Mode
 

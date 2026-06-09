@@ -40,6 +40,14 @@ if command -v dbus-launch >/dev/null 2>&1; then
     eval "$(dbus-launch --sh-syntax --exit-with-session 2>/dev/null)" || true
 fi
 
+if command -v spice-vdagent >/dev/null 2>&1; then
+    if [ -e /dev/virtio-ports/com.redhat.spice.0 ]; then
+        spice-vdagent >/tmp/spice-vdagent.log 2>&1 &
+    else
+        echo "spice-vdagent: /dev/virtio-ports/com.redhat.spice.0 not found" > /tmp/spice-vdagent.log
+    fi
+fi
+
 if command -v xsetroot >/dev/null 2>&1; then
     xsetroot -solid "#1f2430" >/dev/null 2>&1 || true
 fi
