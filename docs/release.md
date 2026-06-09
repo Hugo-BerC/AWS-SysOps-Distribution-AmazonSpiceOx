@@ -37,6 +37,15 @@ Output:
 out/release/
 ```
 
+The default release flavor is `full`, so the first complete image is packaged
+as:
+
+```text
+amazonspiceox-<version>-amd64-full.tar.gz
+```
+
+Detailed profile metadata remains in `BUILDINFO`.
+
 ## Smoke Tests
 
 Recommended pre-release checks:

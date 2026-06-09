@@ -4,14 +4,23 @@ set -eu
 scrollback="${ASOX_TERMINAL_SCROLLBACK:-20000}"
 font="${ASOX_TERMINAL_FONT:-DejaVu Sans Mono}"
 font_size="${ASOX_TERMINAL_FONT_SIZE:-11}"
+geometry="${ASOX_TERMINAL_GEOMETRY:-132x40}"
+foreground="${ASOX_TERMINAL_FOREGROUND:-#d8dee9}"
+background="${ASOX_TERMINAL_BACKGROUND:-#0b0f14}"
+cursor_color="${ASOX_TERMINAL_CURSOR_COLOR:-#88c0d0}"
 
 if command -v xterm >/dev/null 2>&1; then
     exec xterm \
+        -geometry "$geometry" \
         -fa "$font" \
         -fs "$font_size" \
+        -fg "$foreground" \
+        -bg "$background" \
+        -cr "$cursor_color" \
         -sb \
         -rightbar \
         -sl "$scrollback" \
+        -xrm "XTerm*termName: xterm-256color" \
         -xrm "XTerm*alternateScroll: false" \
         -xrm "XTerm*scrollTtyOutput: false" \
         -xrm "XTerm*scrollKey: true" \

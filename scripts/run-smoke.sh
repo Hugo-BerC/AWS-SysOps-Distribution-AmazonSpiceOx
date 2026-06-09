@@ -167,34 +167,35 @@ if ! ( : > "$actual_log_path" ) 2>/dev/null; then
 fi
 
 diag_log_path="$(mktemp)"
+default_append="console=ttyS0 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw quiet loglevel=3 tsc=unstable"
 
 case "$mode" in
     boot)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw}"
+        append_args="${QEMU_APPEND:-$default_append}"
         ;;
     awscli)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=awscli"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=awscli"
         ;;
     ssm)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=ssm"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=ssm"
         ;;
     terraform)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=terraform"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=terraform"
         ;;
     kubectl)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=kubectl"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=kubectl"
         ;;
     docker)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=docker"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=docker"
         ;;
     ssm-powerconnect)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=ssm-powerconnect"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=ssm-powerconnect"
         ;;
     net|network)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=network"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=network"
         ;;
     apt)
-        append_args="${QEMU_APPEND:-console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw} asox.smoke=apt"
+        append_args="${QEMU_APPEND:-$default_append} asox.smoke=apt"
         ;;
     *)
         echo "error: unknown smoke mode: $mode" >&2

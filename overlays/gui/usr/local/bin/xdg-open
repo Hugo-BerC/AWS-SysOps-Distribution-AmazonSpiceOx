@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+    http://*|https://*|file://*)
+        exec /usr/local/bin/asox-browser "$@"
+        ;;
+esac
+
+if [ -x /usr/bin/xdg-open ]; then
+    exec /usr/bin/xdg-open "$@"
+fi
+
+exec /usr/local/bin/asox-browser "$@"

@@ -21,9 +21,11 @@ qemu-system-x86_64 \
   -m 512M \
   -kernel out/bzImage \
   -initrd out/rootfs.cpio.gz \
-  -append "console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw" \
+  -append "console=ttyS0 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw quiet loglevel=3 tsc=unstable" \
   -display none \
-  -serial mon:stdio \
+  -monitor none \
+  -chardev stdio,id=serial0,signal=off \
+  -serial chardev:serial0 \
   -no-reboot \
   -netdev user,id=net0 \
   -device virtio-net-pci,netdev=net0 \
@@ -32,7 +34,12 @@ qemu-system-x86_64 \
 
 `console=ttyS0` sends kernel and userspace output to the serial console.
 
-`earlyprintk=serial,ttyS0,115200` helps debug very early kernel output.
+`quiet loglevel=3` keeps release boot logs focused on warnings and errors.
+
+`tsc=unstable` avoids noisy clocksource watchdog traces under QEMU.
+
+`-chardev stdio,...,signal=off` lets `Ctrl+C` reach the guest shell instead of
+terminating QEMU.
 
 `panic=-1` prevents an immediate reboot after a kernel panic, which makes the
 failure visible.

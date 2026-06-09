@@ -2,6 +2,8 @@ PROJECT := amazonspiceox
 empty :=
 space := $(empty) $(empty)
 
+.DELETE_ON_ERROR:
+
 KERNEL_ARCH ?= x86
 KERNEL_DEFCONFIG ?= x86_64_defconfig
 LINUX_VERSION ?= 6.6.1
@@ -21,6 +23,7 @@ XPRA_PORT ?= 14500
 SSM_POWERCONNECT_REPO ?= https://github.com/Hugo-BerC/SSM-PowerConnect
 SSM_POWERCONNECT_REF ?= main
 RELEASE_VERSION ?= 0.1.0
+RELEASE_FLAVOR ?= full
 ASOX_RELEASE_PROFILES ?= base ops aws awscli ssm terraform kubectl docker ssm-powerconnect
 
 BUILD_DIR := build
@@ -32,6 +35,7 @@ OVERLAY_DIR := overlays
 INIT_FILE := initramfs/init
 KERNEL_HEADERS_DIR := $(BUILD_DIR)/kernel-headers
 ROOTFS_IMAGE_SIZE_MB ?= 256
+ROOTFS_IMAGE_HEADROOM_MB ?= 768
 ROOTFS_LABEL ?= ASOXROOT
 LEGACY_ROOTFS_DIR := $(BUILD_DIR)/legacy-rootfs
 LEGACY_ROOTFS_STAMP := $(LEGACY_ROOTFS_DIR)/.stamp
@@ -187,7 +191,7 @@ QEMU_MEMORY ?= 2048M
 else
 QEMU_MEMORY ?= 512M
 endif
-QEMU_APPEND ?= console=ttyS0 earlyprintk=serial,ttyS0,115200 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw net.ifnames=0 biosdevname=0
+QEMU_APPEND ?= console=ttyS0 panic=-1 init=/init root=/dev/vda rootfstype=ext4 rw net.ifnames=0 biosdevname=0 quiet loglevel=3 tsc=unstable
 QEMU_DISPLAY ?= gtk,gl=off
 QEMU_VGA ?= std
 QEMU_KEYBOARD_LAYOUT ?= es
@@ -272,10 +276,13 @@ profile-info:
 	@echo "SSM-PowerConnect repo: $(SSM_POWERCONNECT_REPO)"
 	@echo "SSM-PowerConnect ref: $(SSM_POWERCONNECT_REF)"
 	@echo "Release version: $(RELEASE_VERSION)"
+	@echo "Release flavor: $(RELEASE_FLAVOR)"
 	@echo "Release profiles: $(ASOX_RELEASE_PROFILES)"
 	@echo "Overlays: $(ROOTFS_OVERLAY_DIRS)"
 	@echo "Rootfs dir: $(ROOTFS_DIR)"
 	@echo "Rootfs image: $(ROOTFS_IMAGE)"
+	@echo "Rootfs image requested size: $(ROOTFS_IMAGE_SIZE_MB)M"
+	@echo "Rootfs image headroom: $(ROOTFS_IMAGE_HEADROOM_MB)M"
 
 .PHONY: deps
 deps:
@@ -578,7 +585,7 @@ root-disk: check-build-path $(ROOTFS_IMAGE)
 image: root-disk
 
 $(ROOTFS_IMAGE): $(ROOTFS_STAMP) scripts/build-root-disk.sh | $(OUT_DIR)
-	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$@" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)"
+	sh scripts/build-root-disk.sh "$(ROOTFS_DIR)" "$@" "$(ROOTFS_IMAGE_SIZE_MB)" "$(ROOTFS_LABEL)" "$(ROOTFS_IMAGE_HEADROOM_MB)"
 
 .PHONY: run
 run: all
@@ -612,14 +619,14 @@ release:
 
 .PHONY: release-package
 release-package: all scripts/build-release.sh
-	sh scripts/build-release.sh "$(RELEASE_VERSION)" "$(DEBIAN_ARCH)" "$(ACTIVE_PROFILE_ID)" "$(ACTIVE_PROFILE_NAME)" "$(NORMALIZED_PROFILES)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" "$(ROOTFS_DIR)" "$(OUT_DIR)" "$(QEMU_APPEND)" "$(QEMU_MEMORY)" "$(QEMU_KEYBOARD_LAYOUT)"
+	sh scripts/build-release.sh "$(RELEASE_VERSION)" "$(DEBIAN_ARCH)" "$(ACTIVE_PROFILE_ID)" "$(ACTIVE_PROFILE_NAME)" "$(NORMALIZED_PROFILES)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" "$(ROOTFS_DIR)" "$(OUT_DIR)" "$(QEMU_APPEND)" "$(QEMU_MEMORY)" "$(QEMU_KEYBOARD_LAYOUT)" "$(RELEASE_FLAVOR)"
 
 .PHONY: release-package-only
 release-package-only: check-build-path scripts/build-release.sh
 	@test -f "$(KERNEL_IMAGE)" || { echo "missing artifact: $(KERNEL_IMAGE)"; exit 1; }
 	@test -f "$(INITRAMFS)" || { echo "missing artifact: $(INITRAMFS)"; exit 1; }
 	@test -f "$(ROOTFS_IMAGE)" || { echo "missing artifact: $(ROOTFS_IMAGE)"; exit 1; }
-	sh scripts/build-release.sh "$(RELEASE_VERSION)" "$(DEBIAN_ARCH)" "$(ACTIVE_PROFILE_ID)" "$(ACTIVE_PROFILE_NAME)" "$(NORMALIZED_PROFILES)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" "$(ROOTFS_DIR)" "$(OUT_DIR)" "$(QEMU_APPEND)" "$(QEMU_MEMORY)" "$(QEMU_KEYBOARD_LAYOUT)"
+	sh scripts/build-release.sh "$(RELEASE_VERSION)" "$(DEBIAN_ARCH)" "$(ACTIVE_PROFILE_ID)" "$(ACTIVE_PROFILE_NAME)" "$(NORMALIZED_PROFILES)" "$(KERNEL_IMAGE)" "$(INITRAMFS)" "$(ROOTFS_IMAGE)" "$(ROOTFS_DIR)" "$(OUT_DIR)" "$(QEMU_APPEND)" "$(QEMU_MEMORY)" "$(QEMU_KEYBOARD_LAYOUT)" "$(RELEASE_FLAVOR)"
 
 .PHONY: smoke
 smoke: all

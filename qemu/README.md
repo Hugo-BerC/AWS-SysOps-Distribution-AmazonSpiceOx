@@ -7,7 +7,8 @@ The default machine uses:
 - x86_64 kernel boot with `-kernel`.
 - gzip-compressed initramfs with `-initrd`.
 - persistent ext4 root disk with `-drive file=out/rootfs.ext4,if=virtio`.
-- serial console through stdio.
+- serial console through stdio with host signal handling disabled, so `Ctrl+C`
+  reaches the guest.
 - no graphical display.
 - user-mode networking with a virtio network device.
 

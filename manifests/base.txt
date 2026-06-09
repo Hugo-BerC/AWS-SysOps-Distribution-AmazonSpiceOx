@@ -1,4 +1,5 @@
 bash
+bash-completion
 ca-certificates
 ifupdown
 iproute2
@@ -6,3 +7,4 @@ iputils-ping
 isc-dhcp-client
 netbase
 procps
+sudo

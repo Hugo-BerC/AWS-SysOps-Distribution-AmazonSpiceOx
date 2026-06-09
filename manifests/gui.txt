@@ -13,6 +13,7 @@ x11-xserver-utils
 x11-utils
 x11-xkb-utils
 xauth
+xdg-utils
 xinit
 xserver-xorg-core
 xserver-xorg-input-libinput
