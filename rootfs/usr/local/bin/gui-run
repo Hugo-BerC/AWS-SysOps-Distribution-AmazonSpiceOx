@@ -68,8 +68,10 @@ run_xpra() {
     fi
 
     if [ "$#" -eq 0 ]; then
-        if command -v xterm >/dev/null 2>&1; then
-            set -- xterm -fa Monospace -fs 11
+        if command -v asox-terminal >/dev/null 2>&1; then
+            set -- asox-terminal
+        elif command -v xterm >/dev/null 2>&1; then
+            set -- xterm -fa "DejaVu Sans Mono" -fs 11 -sb -rightbar -sl 20000
         else
             set -- /bin/bash --login
         fi
@@ -107,8 +109,8 @@ run_selected_backend() {
         host-x11)
             if host_display_ready; then
                 if [ "$#" -eq 0 ]; then
-                    if command -v xterm >/dev/null 2>&1; then
-                        exec xterm -fa Monospace -fs 11
+                    if command -v asox-terminal >/dev/null 2>&1; then
+                        exec asox-terminal
                     fi
                     exec /bin/bash --login
                 fi
@@ -129,8 +131,8 @@ run_selected_backend() {
 
     if host_display_ready; then
         if [ "$#" -eq 0 ]; then
-            if command -v xterm >/dev/null 2>&1; then
-                exec xterm -fa Monospace -fs 11
+            if command -v asox-terminal >/dev/null 2>&1; then
+                exec asox-terminal
             fi
             exec /bin/bash --login
         fi

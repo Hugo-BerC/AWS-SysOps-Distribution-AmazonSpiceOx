@@ -1,0 +1,78 @@
+--- a/ssm_powerconnect.py
++++ b/ssm_powerconnect.py
+@@ -54,6 +54,35 @@
+     return config_path, parser, None
+ 
+ 
++def read_aws_credentials():
++    credentials_path = os.path.expanduser("~/.aws/credentials")
++    parser = configparser.ConfigParser()
++
++    if not os.path.isfile(credentials_path):
++        return credentials_path, parser, None
++
++    try:
++        parser.read(credentials_path)
++    except configparser.Error as exc:
++        error_message = f"{credentials_path}: {exc}"
++        log_error(f"Invalid AWS credentials: {error_message}")
++        return credentials_path, parser, error_message
++
++    return credentials_path, parser, None
++
++
++def profile_name_from_section(section):
++    if section == "default":
++        return "default"
++    if section.startswith("profile "):
++        return section.replace("profile ", "", 1)
++    return section
++
++
++def profiles_from_parser(parser):
++    return [profile_name_from_section(section) for section in parser.sections()]
++
++
+ def get_aws_cli_path():
+     aws_path = shutil.which("aws")
+     if aws_path:
+@@ -150,11 +179,21 @@
+ 
+ 
+ def get_profiles():
++    discovered_profiles = set()
++
++    _config_path, config_parser, config_error = read_aws_config()
++    if not config_error:
++        discovered_profiles.update(profiles_from_parser(config_parser))
++
++    _credentials_path, credentials_parser, credentials_error = read_aws_credentials()
++    if not credentials_error:
++        discovered_profiles.update(profiles_from_parser(credentials_parser))
++
+     output = run_command("aws configure list-profiles")
+-    if not output:
+-        return []
+-    profiles = output.splitlines()
+-    return sorted(profiles)
++    if output:
++        discovered_profiles.update(line.strip() for line in output.splitlines() if line.strip())
++
++    return sorted(discovered_profiles)
+ 
+ 
+ def load_profile_account_ids():
+@@ -163,12 +202,7 @@
+         return {}
+     account_ids = {}
+     for section in parser.sections():
+-        if section == "default":
+-            profile_name = "default"
+-        elif section.startswith("profile "):
+-            profile_name = section.replace("profile ", "", 1)
+-        else:
+-            profile_name = section
++        profile_name = profile_name_from_section(section)
+         account_id = parser.get(section, "sso_account_id", fallback=None)
+         if account_id:
+             account_ids[profile_name] = account_id

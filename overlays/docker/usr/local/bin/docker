@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+if [ -x /usr/bin/docker ]; then
+    exec /usr/bin/docker "$@"
+fi
+
+if [ -x /usr/bin/docker.io ]; then
+    exec /usr/bin/docker.io "$@"
+fi
+
+echo "docker: Docker CLI not found; expected /usr/bin/docker or /usr/bin/docker.io from the docker-cli package" >&2
+exit 127

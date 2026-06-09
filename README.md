@@ -102,12 +102,14 @@ Implemented:
 - boot logging and basic network bring-up
 - Debian Stable rootfs assembly through `debootstrap`
 - manifest-driven package selection
-- composable `base`, `debug`, `ops`, `aws`, `awscli`, `ssm`, `terraform`, and
-  `kubectl` profile building
+- composable `base`, `debug`, `ops`, `aws`, `awscli`, `ssm`, `terraform`,
+  `kubectl`, and `docker` profile building
 - optional `gui` profile for Chromium, X11 app launch, and desktop Python
   runtimes
 - optional `xpra` profile for cross-platform forwarding of individual guest GUI
   apps to WSL or macOS hosts
+- optional `ssm-powerconnect` profile for the Tkinter-based AWS SSM desktop
+  tool
 - interactive login shells now prefer `/bin/bash` when it is present in the
   guest rootfs
 
@@ -144,7 +146,8 @@ sudo apt install -y \
   ca-certificates \
   e2fsprogs \
   gnupg \
-  unzip
+  unzip \
+  patch
 ```
 
 Run a host check with:
@@ -212,12 +215,16 @@ make run-only
 make run-gui
 make run-gui-only
 make xpra-attach
+make release
+make release-package-only
 make smoke
 make smoke-net
 make smoke-awscli
 make smoke-ssm
+make smoke-ssm-powerconnect
 make smoke-terraform
 make smoke-kubectl
+make smoke-docker
 make smoke-apt
 ```
 
@@ -230,8 +237,10 @@ make smoke-only
 make smoke-net-only
 make smoke-awscli-only
 make smoke-ssm-only
+make smoke-ssm-powerconnect-only
 make smoke-terraform-only
 make smoke-kubectl-only
+make smoke-docker-only
 make smoke-apt-only
 make run-gui-only
 make legacy-rootfs
@@ -243,10 +252,56 @@ make distclean
 educational reference. It is also still useful for the tiny initramfs build.
 
 `run-only`, `smoke-only`, `smoke-net-only`, `smoke-awscli-only`,
-`smoke-ssm-only`, and `smoke-apt-only` reuse the current artifacts without
-rebuilding the rootfs or ext4 image. They are useful after a
-`sudo -E make rootfs` / `sudo -E make image` cycle when you only want to
-re-run QEMU-side validation.
+`smoke-ssm-only`, `smoke-docker-only`, and `smoke-apt-only` reuse the current
+artifacts without rebuilding the rootfs or ext4 image. They are useful after a
+`sudo -E make rootfs` / `sudo -E make image` cycle when you only want to re-run
+QEMU-side validation.
+
+## First Release Package
+
+The first complete release profile is:
+
+```text
+base ops aws awscli ssm terraform kubectl docker ssm-powerconnect
+```
+
+`ssm-powerconnect` also automatically implies `gui`, so the full resolved
+profile includes the browser/Tkinter GUI runtime, AWS CLI, Session Manager
+plugin, Terraform, kubectl, kubeconfig helpers, Docker, and SSM-PowerConnect.
+
+Build and package it locally:
+
+```bash
+ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make fetch
+ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make verify-packages
+sudo -E ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make rootfs
+ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make initramfs
+sudo -E ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make image
+sudo -E ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make release-package-only
+```
+
+The release package is written under:
+
+```text
+out/release/
+```
+
+The packager refuses to publish images containing common local AWS state paths
+such as `/root/.aws/config`, `/root/.aws/credentials`, or `/root/.aws/sso`.
+
+To run an unpacked release:
+
+```bash
+tar -xf amazonspiceox-0.1.0-amd64-*.tar.gz
+cd amazonspiceox-0.1.0-amd64-*
+sh run-gui.sh
+```
+
+Inside the guest:
+
+```bash
+ASOX_GUI_BACKEND=local-x11 ssm-powerconnect
+```
 
 ## Profiles and Manifests
 
@@ -262,6 +317,7 @@ Current manifests:
 - `manifests/terraform.txt`
 - `manifests/kubectl.txt`
 - `manifests/xpra.txt`
+- `manifests/ssm-powerconnect.txt`
 - `manifests/gui.txt`
 - `manifests/debug.txt`
 
@@ -316,6 +372,12 @@ make run ASOX_PROFILES="base ops kubectl" KUBECTL_VERSION=v1.36.1
 ```
 
 ```bash
+make fetch ASOX_PROFILES="base ops docker"
+sudo -E make rootfs ASOX_PROFILES="base ops docker"
+make run ASOX_PROFILES="base ops docker"
+```
+
+```bash
 make fetch ASOX_PROFILES="base gui"
 sudo -E make rootfs ASOX_PROFILES="base gui"
 make initramfs
@@ -331,16 +393,28 @@ sudo -E make image ASOX_PROFILES="base gui xpra"
 make run-only ASOX_PROFILES="base gui xpra"
 ```
 
+```bash
+make fetch ASOX_PROFILES="base ssm-powerconnect"
+make verify-packages
+sudo -E make rootfs ASOX_PROFILES="base ssm-powerconnect"
+make initramfs
+sudo -E make image ASOX_PROFILES="base ssm-powerconnect"
+make smoke-ssm-powerconnect-only ASOX_PROFILES="base ssm-powerconnect"
+make run-gui-only ASOX_PROFILES="base ssm-powerconnect"
+```
+
 Package names are standard Debian package names.
 `base` is always included automatically.
 The current `aws` profile is intentionally lightweight and keeps the first
 Debian bootstrap focused on packages that behave well under `debootstrap`.
 The `ops` profile is the main place for day-to-day operator tools that map
 cleanly to Debian packages.
-`awscli` currently lives in its own optional manifest:
+`awscli` and the heavy Docker daemon package currently live in post-bootstrap
+manifests:
 
 ```text
 manifests-post/awscli.txt
+manifests-post/docker.txt
 ```
 
 That means:
@@ -353,10 +427,14 @@ That means:
 - `ASOX_PROFILES="base ops terraform"` adds a version-pinned Terraform binary
 - `ASOX_PROFILES="base ops kubectl"` adds a version-pinned `kubectl` client
   plus kubeconfig helpers
+- `ASOX_PROFILES="base ops docker"` adds Debian `docker-cli`, `docker.io`,
+  Docker helpers, and guest-side cgroup setup for manual daemon startup
 - `ASOX_PROFILES="base gui"` adds a minimal X11-capable guest with Chromium
   and desktop Python launch helpers
 - `ASOX_PROFILES="base gui xpra"` adds an Xpra server path for forwarding
   individual guest windows to WSL or macOS hosts
+- `ASOX_PROFILES="base ssm-powerconnect"` adds the SSM-PowerConnect Tkinter
+  app and automatically pulls in `gui`, `aws`, `awscli`, and `ssm`
 - `cloud-init` stays as a later Phase VI candidate
 
 Current package mapping:
@@ -365,11 +443,14 @@ Current package mapping:
 - `telnet` is provided by `inetutils-telnet`
 - `vim` is now the full `vim` package in the `ops` profile rather than
   `vim-tiny`
-- `curl`, `git`, and `jq` are straight Debian packages
+- `curl`, `git`, `jq`, and `tmux` are straight Debian packages
 - `terraform` is an externally fetched HashiCorp release archive with explicit
   version pinning through `TERRAFORM_VERSION`
 - `kubectl` is an externally fetched upstream Kubernetes client with explicit
   version pinning through `KUBECTL_VERSION`
+- Docker is provided by Debian's split `docker-cli` and `docker.io` packages,
+  installed after the base bootstrap, and launched manually with
+  `docker-start` because AmazonSpiceOx does not use systemd
 - `chromium`, `xinit`, `Xorg`, and Python GUI bits live in the opt-in `gui`
   profile
 - `xpra` lives in its own opt-in profile so the forwarding path stays explicit
@@ -379,12 +460,9 @@ Current package mapping:
   Debian package set
 - the post-bootstrap `xpra` install also includes `xpra-x11`, which upstream
   recommends on Debian for seamless X11 app forwarding
-
-Tools that stay outside the Debian archive for now:
-
-- `docker`: packaging is straightforward from Docker's official Debian repo,
-  but a useful Docker layer also needs daemon lifecycle handling in our
-  non-systemd guest
+- `ssm-powerconnect` fetches the `AmazonSpiceOx/` app folder from
+  `https://github.com/Hugo-BerC/SSM-PowerConnect` and installs it into
+  `/opt/ssm-powerconnect` with a `/usr/local/bin/ssm-powerconnect` launcher
 
 Terraform example:
 
@@ -416,6 +494,38 @@ Implementation detail:
   is copied into `/usr/local/bin/kubectl`
 - AmazonSpiceOx also includes `kubeconfig` and exports
   `KUBECONFIG=/root/.kube/config` when the `kubectl` profile is active
+
+Docker example:
+
+```bash
+make fetch ASOX_PROFILES="base ops docker"
+sudo -E make rootfs ASOX_PROFILES="base ops docker"
+sudo -E make image ASOX_PROFILES="base ops docker"
+make smoke-docker-only ASOX_PROFILES="base ops docker"
+make run-only ASOX_PROFILES="base ops docker"
+```
+
+Inside arrakis:
+
+```bash
+docker-status
+docker-start
+docker run --rm hello-world
+```
+
+Implementation detail:
+
+- Docker comes from Debian's split `docker-cli` and `docker.io` packages
+- it is installed in the post-bootstrap package phase so service start attempts
+  are blocked cleanly during image assembly
+- AmazonSpiceOx mounts cgroup v2 during stage-2 init when the kernel supports
+  it
+- `docker-start` runs `dockerd` manually and logs to `/var/log/docker.log`
+- if daemon startup fails on iptables setup while tuning the kernel, retry with
+  `DOCKER_IPTABLES=false docker-start`
+- the default storage driver is `vfs` for broad QEMU compatibility; override it
+  with `DOCKER_STORAGE_DRIVER=overlay2 docker-start` when the kernel/image
+  combination supports overlayfs cleanly
 
 Example with the optional AWS CLI manifest:
 
@@ -464,6 +574,8 @@ The `gui` profile installs:
 - `Xorg`
 - `openbox`
 - `xterm`
+- `asox-terminal`
+- `x11-xkb-utils`
 - `python3`
 - `python3-pip`
 - `python3-venv`
@@ -525,6 +637,47 @@ make run-gui-only ASOX_PROFILES="base gui"
 we can keep the workflow package-driven and reproducible while still giving you
 a Chrome-like browser inside the VM.
 
+### Keyboard and Console UX
+
+Graphical QEMU boots default to a Spanish keyboard layout:
+
+```bash
+QEMU_KEYBOARD_LAYOUT=es make run-gui-only ASOX_PROFILES="base gui"
+```
+
+Inside guest X11 sessions, AmazonSpiceOx also applies:
+
+```bash
+ASOX_KEYBOARD_LAYOUT=es
+```
+
+Override either variable if you need another layout. The serial `run.sh`
+console is different: it receives characters from the host terminal, so its
+keyboard behavior is controlled mostly by Windows Terminal, WSL, macOS
+Terminal, or whatever terminal is running QEMU.
+
+For graphical terminal windows, use `asox-terminal` or `gui-run` without
+arguments. It wraps `xterm` with a visible scrollbar and larger scrollback:
+
+```bash
+gui-run
+gui-run asox-terminal
+```
+
+If mouse wheel scrolling in the serial console repeats shell history instead
+of moving through scrollback, use the host terminal scrollbar or start a
+graphical terminal with `ASOX_GUI_BACKEND=local-x11 gui-run asox-terminal`.
+
+For a better serial-console buffer, run:
+
+```bash
+asox-console
+```
+
+That attaches to a `tmux` session with mouse support and a larger scrollback.
+Inside tmux, use `Ctrl+b` then `[` for copy/scroll mode, or the mouse wheel
+when your host terminal forwards mouse events.
+
 ### Xpra Mode
 
 The `xpra` profile is the recommended release path for WSL and macOS hosts.
@@ -547,6 +700,7 @@ xpra-info
 chrome
 python-gui
 python-gui /root/my-app.py
+ssm-powerconnect
 ```
 
 From the host, attach with:
@@ -563,6 +717,38 @@ xpra attach tcp://127.0.0.1:14500/
 
 This works because QEMU forwards host port `14500` to the guest `xpra` server
 when the `xpra` profile is active.
+
+### SSM-PowerConnect
+
+`ssm-powerconnect` is a composite profile for the Tkinter AWS SysOps tool.
+
+It implies:
+
+- `gui`
+- `aws`
+- `awscli`
+- `ssm`
+
+Build and validate:
+
+```bash
+make fetch ASOX_PROFILES="base ssm-powerconnect"
+make verify-packages
+sudo -E make rootfs ASOX_PROFILES="base ssm-powerconnect"
+make initramfs
+sudo -E make image ASOX_PROFILES="base ssm-powerconnect"
+make smoke-ssm-powerconnect-only ASOX_PROFILES="base ssm-powerconnect"
+```
+
+Run it inside the guest:
+
+```bash
+ssm-powerconnect
+```
+
+The app is installed in `/opt/ssm-powerconnect` and launched through
+`python-gui`, so it follows the same GUI backend rules as `chrome` and other
+Tkinter apps.
 
 ## Rootfs Strategy
 
@@ -613,6 +799,7 @@ Start here:
 
 - [docs/boot-process.md](docs/boot-process.md)
 - [docs/overlay-profiles.md](docs/overlay-profiles.md)
+- [docs/release.md](docs/release.md)
 - [docs/mirror-rootfs.md](docs/mirror-rootfs.md)
 - [docs/persistent-rootfs.md](docs/persistent-rootfs.md)
 - [docs/roadmap.md](docs/roadmap.md)
@@ -638,6 +825,25 @@ sudo chown -R "$USER:$USER" build downloads out
 
 Then rerun the normal flow without `sudo` except for `make rootfs` and
 `make image`.
+
+If `apt-get update` reports repository signatures like:
+
+```text
+Not live until ...
+The repository ... InRelease is not signed
+```
+
+the WSL or VM clock is behind the timestamp on Debian's signed metadata.
+Restarting WSL normally refreshes the clock:
+
+```powershell
+wsl --shutdown
+```
+
+Then open WSL again and rerun the build. The post-bootstrap package installer
+also uses a temporary base-only Debian source list during image assembly to
+avoid `trixie-security` and `trixie-updates` clock skew blocking packages such
+as `awscli` and `docker.io`.
 
 ## Legacy Toolchain Work
 

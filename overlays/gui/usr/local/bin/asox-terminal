@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+scrollback="${ASOX_TERMINAL_SCROLLBACK:-20000}"
+font="${ASOX_TERMINAL_FONT:-DejaVu Sans Mono}"
+font_size="${ASOX_TERMINAL_FONT_SIZE:-11}"
+
+if command -v xterm >/dev/null 2>&1; then
+    exec xterm \
+        -fa "$font" \
+        -fs "$font_size" \
+        -sb \
+        -rightbar \
+        -sl "$scrollback" \
+        -xrm "XTerm*alternateScroll: false" \
+        -xrm "XTerm*scrollTtyOutput: false" \
+        -xrm "XTerm*scrollKey: true" \
+        "$@"
+fi
+
+exec /bin/bash --login

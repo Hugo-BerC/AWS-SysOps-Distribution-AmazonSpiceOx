@@ -14,6 +14,7 @@ qemu_gui="${QEMU_GUI:-0}"
 qemu_display="${QEMU_DISPLAY:-gtk,gl=off}"
 qemu_vga="${QEMU_VGA:-std}"
 qemu_hostfwd="${QEMU_HOSTFWD:-}"
+qemu_keyboard_layout="${QEMU_KEYBOARD_LAYOUT:-es}"
 
 netdev_spec="user,id=net0"
 
@@ -46,6 +47,10 @@ if [ "$qemu_gui" = "1" ]; then
         -usb \
         -device usb-kbd \
         -device usb-tablet
+
+    if [ -n "$qemu_keyboard_layout" ]; then
+        set -- "$@" -k "$qemu_keyboard_layout"
+    fi
 fi
 
 if [ "$qemu_serial_stdio" = "1" ]; then

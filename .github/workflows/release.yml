@@ -1,0 +1,75 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: AmazonSpiceOx release version
+        required: true
+        default: 0.1.0
+      release_profiles:
+        description: Space-separated profile list
+        required: true
+        default: base ops aws awscli ssm terraform kubectl docker ssm-powerconnect
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc \
+            binutils \
+            bison \
+            build-essential \
+            bzip2 \
+            ca-certificates \
+            cpio \
+            curl \
+            debootstrap \
+            e2fsprogs \
+            file \
+            flex \
+            gnupg \
+            gzip \
+            libelf-dev \
+            libssl-dev \
+            make \
+            musl-tools \
+            patch \
+            qemu-system-x86 \
+            unzip \
+            xz-utils
+
+      - name: Check tools
+        run: make deps
+
+      - name: Build release artifacts
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.release_version || github.ref_name }}
+          ASOX_PROFILES: ${{ github.event.inputs.release_profiles || 'base ops aws awscli ssm terraform kubectl docker ssm-powerconnect' }}
+        run: |
+          make fetch
+          make verify-packages
+          sudo -E env "PATH=$PATH" make rootfs
+          make initramfs
+          sudo -E env "PATH=$PATH" make image
+          sudo -E env "PATH=$PATH" make release-package-only
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: amazonspiceox-release
+          path: |
+            out/release/*.tar.gz
+            out/release/*.tar.gz.sha256
+          if-no-files-found: error

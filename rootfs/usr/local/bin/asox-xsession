@@ -5,6 +5,7 @@ export HOME="${HOME:-/root}"
 export USER="${USER:-root}"
 export SHELL="${SHELL:-/bin/bash}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-root}"
+keyboard_layout="${ASOX_KEYBOARD_LAYOUT:-es}"
 
 ensure_system_dbus() {
     dbus_socket="/run/dbus/system_bus_socket"
@@ -43,13 +44,17 @@ if command -v xsetroot >/dev/null 2>&1; then
     xsetroot -solid "#1f2430" >/dev/null 2>&1 || true
 fi
 
+if command -v setxkbmap >/dev/null 2>&1; then
+    setxkbmap "$keyboard_layout" >/tmp/setxkbmap.log 2>&1 || true
+fi
+
 if command -v openbox >/dev/null 2>&1; then
     openbox >/tmp/openbox.log 2>&1 &
 fi
 
 if [ "$#" -eq 0 ]; then
-    if command -v xterm >/dev/null 2>&1; then
-        exec xterm -fa Monospace -fs 11
+    if command -v asox-terminal >/dev/null 2>&1; then
+        exec asox-terminal
     fi
     exec /bin/bash --login
 fi

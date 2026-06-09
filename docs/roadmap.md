@@ -137,6 +137,8 @@ Current first cut:
 - `ASOX_PROFILES="base ops terraform"` for a version-pinned Terraform layer
 - `ASOX_PROFILES="base ops kubectl"` for a version-pinned kubectl client plus
   kubeconfig helper layer
+- `ASOX_PROFILES="base ops docker"` for Docker CLI/daemon packages with
+  manual daemon startup in the non-systemd guest
 - `ASOX_PROFILES="base gui"` for a minimal X11-capable guest that can launch
   Chromium and desktop Python apps without a full desktop environment
 - `ASOX_PROFILES="base gui xpra"` for forwarding Chromium and Tkinter apps to
@@ -148,6 +150,8 @@ Current first cut:
   inside the guest
 - `make smoke-kubectl` / `make smoke-kubectl-only` to validate kubectl and
   kubeconfig helpers inside the guest
+- `make smoke-docker` / `make smoke-docker-only` to validate Docker tooling
+  and guest cgroup setup
 - the `awscli` layer is installed post-bootstrap with `apt` rather than through
   `debootstrap --include`
 - the `ssm` layer is fetched from AWS, signature-verified, and installed
@@ -156,8 +160,6 @@ Current first cut:
   and pinned through `TERRAFORM_VERSION`
 - the `kubectl` layer is fetched from `dl.k8s.io`, checksum-verified, and
   pinned through `KUBECTL_VERSION`
-
-Next recommended slices:
-
-- `docker`: official Docker Debian repo packages, paired with a later service
-  management phase because this guest does not use systemd
+- the `docker` layer is installed from Debian's split `docker-cli` and
+  `docker.io` packages during the post-bootstrap package phase and uses
+  `docker-start` instead of systemd service units

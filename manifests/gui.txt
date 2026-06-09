@@ -11,6 +11,7 @@ python3-venv
 udev
 x11-xserver-utils
 x11-utils
+x11-xkb-utils
 xauth
 xinit
 xserver-xorg-core
