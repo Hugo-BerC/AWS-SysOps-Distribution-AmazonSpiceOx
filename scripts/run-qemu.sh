@@ -15,8 +15,48 @@ qemu_display="${QEMU_DISPLAY:-gtk,gl=off}"
 qemu_vga="${QEMU_VGA:-std}"
 qemu_hostfwd="${QEMU_HOSTFWD:-}"
 qemu_keyboard_layout="${QEMU_KEYBOARD_LAYOUT:-es}"
+qemu_accel="${QEMU_ACCEL:-auto}"
+qemu_cpu="${QEMU_CPU:-auto}"
+qemu_smp="${QEMU_SMP:-2}"
+qemu_clipboard="${QEMU_CLIPBOARD:-auto}"
+qemu_host_ip="${QEMU_HOST_IP:-auto}"
 
 netdev_spec="user,id=net0"
+
+detect_accel() {
+    host_os="$(uname -s 2>/dev/null || echo unknown)"
+    host_arch="$(uname -m 2>/dev/null || echo unknown)"
+
+    if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+        printf '%s\n' kvm
+        return 0
+    fi
+
+    if [ -e /dev/kvm ]; then
+        echo "warning: /dev/kvm exists but is not writable by this user; falling back to TCG" >&2
+        echo "warning: add the user to the kvm group and restart WSL/Linux for fast QEMU" >&2
+    fi
+
+    if [ "$host_os" = "Darwin" ] && [ "$host_arch" = "x86_64" ]; then
+        printf '%s\n' hvf
+        return 0
+    fi
+
+    printf '%s\n' tcg
+}
+
+detect_host_ip() {
+    if [ -n "${WSL_INTEROP:-}" ] || grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+        awk '/^nameserver[[:space:]]/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true
+        return 0
+    fi
+
+    printf '%s\n' ""
+}
+
+supports_qemu_vdagent() {
+    "$qemu_bin" -chardev help 2>&1 | grep -q 'qemu-vdagent'
+}
 
 if [ -n "$qemu_hostfwd" ]; then
     old_ifs="$IFS"
@@ -28,17 +68,48 @@ if [ -n "$qemu_hostfwd" ]; then
     IFS="$old_ifs"
 fi
 
+if [ "$qemu_host_ip" = "auto" ]; then
+    qemu_host_ip="$(detect_host_ip)"
+fi
+
+if [ -n "$qemu_host_ip" ]; then
+    qemu_append="$qemu_append asox.host_ip=$qemu_host_ip"
+fi
+
+if [ "$qemu_accel" = "auto" ]; then
+    qemu_accel="$(detect_accel)"
+fi
+
 # User-mode networking gives the guest a DHCP server without host setup.
 # virtio-net-pci keeps the device simple and fast once the kernel has virtio
 # support built in.
 set -- \
     -m "$qemu_memory" \
+    -smp "$qemu_smp" \
     -kernel "$kernel_image" \
     -initrd "$initramfs_image" \
     -append "$qemu_append" \
     -no-reboot \
     -netdev "$netdev_spec" \
     -device virtio-net-pci,netdev=net0
+
+case "$qemu_accel" in
+    ""|none|off)
+        ;;
+    tcg)
+        set -- "$@" -accel tcg,thread=multi
+        ;;
+    *)
+        set -- "$@" -accel "$qemu_accel"
+        if [ "$qemu_cpu" = "auto" ] && [ "$qemu_accel" = "kvm" ]; then
+            qemu_cpu=host
+        fi
+        ;;
+esac
+
+if [ "$qemu_cpu" != "auto" ] && [ -n "$qemu_cpu" ]; then
+    set -- "$@" -cpu "$qemu_cpu"
+fi
 
 if [ "$qemu_gui" = "1" ]; then
     set -- "$@" \
@@ -51,6 +122,23 @@ if [ "$qemu_gui" = "1" ]; then
     if [ -n "$qemu_keyboard_layout" ]; then
         set -- "$@" -k "$qemu_keyboard_layout"
     fi
+
+    if [ "$qemu_clipboard" = "auto" ]; then
+        if supports_qemu_vdagent; then
+            qemu_clipboard=1
+        else
+            qemu_clipboard=0
+        fi
+    fi
+
+    case "$qemu_clipboard" in
+        1|yes|true|on)
+            set -- "$@" \
+                -device virtio-serial-pci \
+                -chardev qemu-vdagent,id=spiceagent,name=vdagent,clipboard=on \
+                -device virtserialport,chardev=spiceagent,name=com.redhat.spice.0
+            ;;
+    esac
 fi
 
 if [ "$qemu_serial_stdio" = "1" ]; then

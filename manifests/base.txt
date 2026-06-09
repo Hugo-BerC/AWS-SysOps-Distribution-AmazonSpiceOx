@@ -6,5 +6,6 @@ iproute2
 iputils-ping
 isc-dhcp-client
 netbase
+ncurses-term
 procps
 sudo

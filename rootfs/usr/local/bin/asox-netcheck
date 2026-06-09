@@ -17,6 +17,10 @@ echo "[asox-netcheck] resolv.conf"
 cat /etc/resolv.conf 2>/dev/null || true
 echo
 
+echo "[asox-netcheck] hosts"
+cat /etc/hosts 2>/dev/null || true
+echo
+
 echo "[asox-netcheck] nsswitch.conf"
 cat /etc/nsswitch.conf 2>/dev/null || true
 echo
@@ -37,9 +41,44 @@ echo "[asox-netcheck] ping 10.0.2.2"
 ping -c 1 10.0.2.2 2>/dev/null || true
 echo
 
+echo "[asox-netcheck] getent hosts host.qemu.internal"
+getent hosts host.qemu.internal 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] ping host.qemu.internal"
+ping -c 1 host.qemu.internal 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] getent hosts host.os.internal"
+getent hosts host.os.internal 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] ping host.os.internal"
+ping -c 1 host.os.internal 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] getent hosts host.windows.internal"
+getent hosts host.windows.internal 2>/dev/null || true
+echo
+
+echo "[asox-netcheck] ping host.windows.internal"
+ping -c 1 host.windows.internal 2>/dev/null || true
+echo
+
 echo "[asox-netcheck] ping 1.1.1.1"
 ping -c 1 1.1.1.1 2>/dev/null || true
 echo
 
 echo "[asox-netcheck] ping deb.debian.org"
 ping -c 1 deb.debian.org 2>/dev/null || true
+echo
+
+if [ -n "${ASOX_HOST_TEST_URL:-}" ]; then
+    echo "[asox-netcheck] curl $ASOX_HOST_TEST_URL"
+    if command -v curl >/dev/null 2>&1; then
+        curl --connect-timeout 5 --max-time 10 -v "$ASOX_HOST_TEST_URL" || true
+    else
+        echo "curl not installed in this profile"
+    fi
+    echo
+fi

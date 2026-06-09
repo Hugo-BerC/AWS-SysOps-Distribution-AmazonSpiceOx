@@ -39,7 +39,7 @@ apply_overlay() {
         fi
 
         mkdir -p "$(dirname "$dest_path")"
-        cp -a "$src_path" "$dest_path"
+        cp -a --no-preserve=ownership "$src_path" "$dest_path"
     done
 }
 
@@ -401,6 +401,10 @@ if [ -f "$rootfs_dir/usr/local/bin/asox-netcheck" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-netcheck"
 fi
 
+if [ -f "$rootfs_dir/usr/local/bin/asox-termcheck" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-termcheck"
+fi
+
 if [ -f "$rootfs_dir/usr/local/bin/asox-console" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-console"
 fi
@@ -427,6 +431,10 @@ fi
 
 if [ -f "$rootfs_dir/usr/local/bin/asox-browser" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-browser"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/asox-clipboard" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-clipboard"
 fi
 
 if [ -f "$rootfs_dir/usr/local/bin/xdg-open" ]; then
@@ -466,8 +474,14 @@ if [ -f "$rootfs_dir/usr/local/bin/ssm-powerconnect" ]; then
 fi
 
 if [ -d "$rootfs_dir/etc/sudoers.d" ]; then
+    chown -R 0:0 "$rootfs_dir/etc/sudoers.d"
     chmod 0750 "$rootfs_dir/etc/sudoers.d"
     find "$rootfs_dir/etc/sudoers.d" -type f -exec chmod 0440 {} \;
+fi
+
+if [ -f "$rootfs_dir/usr/bin/sudo" ]; then
+    chown 0:0 "$rootfs_dir/usr/bin/sudo"
+    chmod 4755 "$rootfs_dir/usr/bin/sudo"
 fi
 
 validate_profile_artifacts "$rootfs_dir" "$profile_name"

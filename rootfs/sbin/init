@@ -7,7 +7,7 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin
 export PS1='arrakis:\w# '
 export HOME=/root
-export TERM=linux
+export TERM="${TERM:-xterm-256color}"
 export ENV=/etc/profile
 
 HOSTNAME_FILE=/etc/hostname
@@ -15,6 +15,7 @@ BOOT_LOG=/var/log/boot.log
 PROFILE_FILE=/etc/amazonspiceox-profile
 RESOLV_CONF=/etc/resolv.conf
 HOSTS_FILE=/etc/hosts
+HOST_OS_IP=
 ACTIVE_PROFILE=base
 SMOKE_MODE=none
 SMOKE_STATE_DIR=/var/lib/amazonspiceox/smoke
@@ -29,27 +30,44 @@ log() {
 
 interactive_shell() {
     shell_bin="/bin/sh"
+    console_device="/dev/console"
+    shell_status=0
+
+    for candidate in /dev/ttyS0 /dev/hvc0 /dev/tty1 /dev/console; do
+        if [ -c "$candidate" ]; then
+            console_device="$candidate"
+            break
+        fi
+    done
 
     cd "$HOME" 2>/dev/null || cd /
-    stty sane intr '^C' susp '^Z' eof '^D' erase '^?' kill '^U' </dev/console 2>/dev/null || true
+    stty -F "$console_device" sane -ixon -ixoff intr '^C' susp '^Z' eof '^D' erase '^?' kill '^U' 2>/dev/null || true
+
+    run_shell_session() {
+        set +e
+        if setsid --help 2>&1 | grep -q -- '--ctty'; then
+            setsid --ctty "$@" < "$console_device" > "$console_device" 2>&1
+            shell_status=$?
+        elif command -v cttyhack >/dev/null 2>&1; then
+            setsid cttyhack "$@" < "$console_device" > "$console_device" 2>&1
+            shell_status=$?
+        else
+            setsid "$@" < "$console_device" > "$console_device" 2>&1
+            shell_status=$?
+        fi
+        set -e
+        return "$shell_status"
+    }
 
     if [ -x /bin/bash ]; then
         shell_bin="/bin/bash"
         export SHELL="$shell_bin"
-        if command -v cttyhack >/dev/null 2>&1; then
-            setsid cttyhack "$shell_bin" --login
-        else
-            setsid "$shell_bin" --login </dev/console >/dev/console 2>&1
-        fi
+        run_shell_session "$shell_bin" --login || true
         return
     fi
 
     export SHELL="$shell_bin"
-    if command -v cttyhack >/dev/null 2>&1; then
-        setsid cttyhack "$shell_bin"
-    else
-        setsid "$shell_bin" </dev/console >/dev/console 2>&1
-    fi
+    run_shell_session "$shell_bin" || true
 }
 
 set_smoke_status() {
@@ -98,6 +116,9 @@ read_boot_cmdline() {
         case "$arg" in
             asox.smoke=*)
                 SMOKE_MODE="${arg#asox.smoke=}"
+                ;;
+            asox.host_ip=*)
+                HOST_OS_IP="${arg#asox.host_ip=}"
                 ;;
         esac
     done
@@ -225,6 +246,21 @@ setup_udev() {
     log "udev initialized"
 }
 
+setup_spice_vdagentd() {
+    if ! command -v spice-vdagentd >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ ! -e /dev/virtio-ports/com.redhat.spice.0 ]; then
+        log "spice vdagent virtio port not present; graphical clipboard channel disabled"
+        return 0
+    fi
+
+    mkdir -p /run/spice-vdagentd
+    spice-vdagentd >/tmp/spice-vdagentd.log 2>&1 &
+    log "spice-vdagentd started for graphical clipboard support"
+}
+
 setup_hostname() {
     name="arrakis"
 
@@ -340,6 +376,13 @@ setup_hosts() {
 ff02::1 ip6-allnodes
 ff02::2 ip6-allrouters
 EOF
+
+    if [ -n "$HOST_OS_IP" ]; then
+        cat >> "$HOSTS_FILE" <<EOF
+
+$HOST_OS_IP host.os.internal host.windows.internal host.wsl.internal
+EOF
+    fi
 
     log "hosts configured with QEMU host gateway aliases"
 }
@@ -481,14 +524,8 @@ run_requested_smoke() {
     esac
 }
 
-finish_requested_smoke() {
-    case "$SMOKE_MODE" in
-        ""|none)
-            return 0
-            ;;
-    esac
-
-    log "requested smoke finished; asking the guest to power off"
+request_poweroff() {
+    log "$1"
     sync 2>/dev/null || true
 
     if command -v poweroff >/dev/null 2>&1; then
@@ -516,6 +553,16 @@ finish_requested_smoke() {
     done
 }
 
+finish_requested_smoke() {
+    case "$SMOKE_MODE" in
+        ""|none)
+            return 0
+            ;;
+    esac
+
+    request_poweroff "requested smoke finished; asking the guest to power off"
+}
+
 start_shell() {
     log "AmazonSpiceOx Phase III boot complete"
     log "active profile: $ACTIVE_PROFILE"
@@ -527,11 +574,8 @@ start_shell() {
     echo "Kernel: $(uname -r)"
     echo
 
-    while true; do
-        interactive_shell
-        log "interactive shell exited; restarting in 2 seconds"
-        sleep 2
-    done
+    interactive_shell
+    request_poweroff "interactive shell exited; asking the guest to power off"
 }
 
 setup_runtime_dirs
@@ -545,6 +589,7 @@ set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_STAGE2_READY"
 setup_cgroups
 setup_devices
 setup_udev
+setup_spice_vdagentd
 setup_hostname
 set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_HOSTNAME_READY"
 setup_network

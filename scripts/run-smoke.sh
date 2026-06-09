@@ -221,6 +221,10 @@ fi
 
 status=0
 QEMU_MEMORY="${QEMU_MEMORY:-512M}" \
+QEMU_ACCEL="${QEMU_ACCEL:-auto}" \
+QEMU_CPU="${QEMU_CPU:-auto}" \
+QEMU_SMP="${QEMU_SMP:-2}" \
+QEMU_HOST_IP="${QEMU_HOST_IP:-auto}" \
 QEMU_APPEND="$append_args" \
 QEMU_SERIAL_FILE="$actual_log_path" \
 timeout --signal=INT --kill-after=5s "$timeout_value" \
