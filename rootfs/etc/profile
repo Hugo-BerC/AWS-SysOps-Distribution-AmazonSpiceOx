@@ -1,7 +1,19 @@
 export PATH=/usr/local/sbin:/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin
 export PS1='arrakis:\w# '
+export EDITOR="${EDITOR:-vim}"
+export VISUAL="${VISUAL:-vim}"
 export ASOX_KEYBOARD_LAYOUT="${ASOX_KEYBOARD_LAYOUT:-es}"
 export ASOX_TERMINAL_SCROLLBACK="${ASOX_TERMINAL_SCROLLBACK:-20000}"
+export ASOX_HOST_GATEWAY="${ASOX_HOST_GATEWAY:-10.0.2.2}"
+
+if [ -n "${BASH_VERSION:-}" ]; then
+    shopt -s checkwinsize 2>/dev/null || true
+    shopt -s histappend 2>/dev/null || true
+
+    if [ -r /usr/share/bash-completion/bash_completion ]; then
+        . /usr/share/bash-completion/bash_completion
+    fi
+fi
 
 if [ -d /etc/profile.d ]; then
     for profile_script in /etc/profile.d/*.sh; do

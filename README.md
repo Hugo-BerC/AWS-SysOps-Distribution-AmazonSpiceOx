@@ -193,11 +193,15 @@ AMAZONSPICEOX_PHASE3_BOOT_OK
 arrakis:/#
 ```
 
-To exit QEMU in `-nographic` mode:
+To exit QEMU cleanly from inside the guest:
 
 ```text
-Ctrl+a, then x
+poweroff
 ```
+
+The serial console passes `Ctrl+C` through to the guest, so it behaves like a
+normal Linux interrupt instead of closing QEMU. If the guest is not responding,
+close the host terminal or stop the QEMU process from another terminal.
 
 ## Make Targets
 
@@ -285,6 +289,14 @@ The release package is written under:
 ```text
 out/release/
 ```
+
+Release artifacts use a short flavor name by default, for example:
+
+```text
+amazonspiceox-0.1.0-amd64-full.tar.gz
+```
+
+The full resolved profile is recorded inside `BUILDINFO`.
 
 The packager refuses to publish images containing common local AWS state paths
 such as `/root/.aws/config`, `/root/.aws/credentials`, or `/root/.aws/sso`.
@@ -667,6 +679,8 @@ gui-run asox-terminal
 If mouse wheel scrolling in the serial console repeats shell history instead
 of moving through scrollback, use the host terminal scrollbar or start a
 graphical terminal with `ASOX_GUI_BACKEND=local-x11 gui-run asox-terminal`.
+`asox-terminal` defaults to a dark xterm theme, larger geometry, and
+`xterm-256color`, which improves full-screen tools such as Vim.
 
 For a better serial-console buffer, run:
 
@@ -677,6 +691,27 @@ asox-console
 That attaches to a `tmux` session with mouse support and a larger scrollback.
 Inside tmux, use `Ctrl+b` then `[` for copy/scroll mode, or the mouse wheel
 when your host terminal forwards mouse events.
+
+### Host Gateway
+
+QEMU user-mode networking exposes the host gateway at `10.0.2.2`. AmazonSpiceOx
+also writes common aliases into `/etc/hosts`:
+
+```text
+host.qemu.internal
+host.local
+host.docker.internal
+host.containers.internal
+```
+
+For a host service listening on port `8000`, test from arrakis with:
+
+```bash
+curl http://host.qemu.internal:8000/
+```
+
+The service must listen on an address reachable from QEMU, not only on an
+unreachable loopback namespace.
 
 ### Xpra Mode
 
@@ -749,6 +784,10 @@ ssm-powerconnect
 The app is installed in `/opt/ssm-powerconnect` and launched through
 `python-gui`, so it follows the same GUI backend rules as `chrome` and other
 Tkinter apps.
+
+AWS SSO browser flows use the same browser plumbing. The GUI profile exports
+`BROWSER=/usr/local/bin/asox-browser`, and the guest provides `xdg-open`,
+`x-www-browser`, and `sensible-browser` wrappers that launch Chromium.
 
 ## Rootfs Strategy
 

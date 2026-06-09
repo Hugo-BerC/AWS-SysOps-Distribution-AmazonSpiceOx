@@ -57,12 +57,14 @@ if [ "$qemu_serial_stdio" = "1" ]; then
     if [ "$qemu_gui" = "1" ]; then
         set -- "$@" \
             -monitor none \
-            -serial stdio
+            -chardev stdio,id=serial0,signal=off \
+            -serial chardev:serial0
     else
         set -- "$@" \
             -display none \
             -monitor none \
-            -serial stdio
+            -chardev stdio,id=serial0,signal=off \
+            -serial chardev:serial0
     fi
 elif [ -n "$qemu_serial_file" ]; then
     if [ "$qemu_gui" = "1" ]; then
@@ -78,11 +80,15 @@ elif [ -n "$qemu_serial_file" ]; then
 else
     if [ "$qemu_gui" = "1" ]; then
         set -- "$@" \
-            -serial mon:stdio
+            -monitor none \
+            -chardev stdio,id=serial0,signal=off \
+            -serial chardev:serial0
     else
         set -- "$@" \
             -display none \
-            -serial mon:stdio
+            -monitor none \
+            -chardev stdio,id=serial0,signal=off \
+            -serial chardev:serial0
     fi
 fi
 

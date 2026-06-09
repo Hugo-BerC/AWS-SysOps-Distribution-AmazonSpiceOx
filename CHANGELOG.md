@@ -2,6 +2,32 @@
 
 All notable progress in AmazonSpiceOx is tracked here.
 
+## 2026-06-09 - v1.1 Usability and Integration Fixes
+
+Implemented:
+
+- serial QEMU console now uses stdio with `signal=off`, so `Ctrl+C` is passed
+  to the guest instead of killing QEMU
+- stage-2 login shells now `cd` into the active user's home directory and
+  normalize basic TTY control keys before launching Bash
+- base profile now includes `sudo` and `bash-completion`
+- root profile sources Bash completion when available
+- `sudoers.d` policy for root and future `sudo` group users
+- QEMU host gateway aliases:
+  `host.qemu.internal`, `host.local`, `host.docker.internal`, and
+  `host.containers.internal`
+- network smoke now validates the host gateway alias
+- GUI profile now defaults `ASOX_GUI_BACKEND=auto`
+- `asox-browser`, `xdg-open`, `x-www-browser`, and `sensible-browser` wrappers
+  route browser launches to Chromium for AWS SSO and other auth flows
+- `asox-terminal` now opens xterm with a dark theme, larger geometry, scrollbar,
+  and `xterm-256color`
+- release kernel command line defaults remove `earlyprintk` and add
+  `quiet loglevel=3 tsc=unstable`
+- release artifact naming now uses a clean flavor slug such as
+  `amazonspiceox-0.1.0-amd64-full.tar.gz`, with full profile details kept in
+  `BUILDINFO`
+
 ## 2026-06-07 - First Release Packaging
 
 Implemented:

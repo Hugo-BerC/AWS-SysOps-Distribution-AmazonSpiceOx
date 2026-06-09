@@ -71,7 +71,7 @@ run_xpra() {
         if command -v asox-terminal >/dev/null 2>&1; then
             set -- asox-terminal
         elif command -v xterm >/dev/null 2>&1; then
-            set -- xterm -fa "DejaVu Sans Mono" -fs 11 -sb -rightbar -sl 20000
+            set -- xterm -geometry 132x40 -fa "DejaVu Sans Mono" -fs 11 -fg "#d8dee9" -bg "#0b0f14" -cr "#88c0d0" -sb -rightbar -sl 20000
         else
             set -- /bin/bash --login
         fi

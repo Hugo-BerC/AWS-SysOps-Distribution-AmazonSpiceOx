@@ -14,6 +14,7 @@ HOSTNAME_FILE=/etc/hostname
 BOOT_LOG=/var/log/boot.log
 PROFILE_FILE=/etc/amazonspiceox-profile
 RESOLV_CONF=/etc/resolv.conf
+HOSTS_FILE=/etc/hosts
 ACTIVE_PROFILE=base
 SMOKE_MODE=none
 SMOKE_STATE_DIR=/var/lib/amazonspiceox/smoke
@@ -28,6 +29,9 @@ log() {
 
 interactive_shell() {
     shell_bin="/bin/sh"
+
+    cd "$HOME" 2>/dev/null || cd /
+    stty sane intr '^C' susp '^Z' eof '^D' erase '^?' kill '^U' </dev/console 2>/dev/null || true
 
     if [ -x /bin/bash ]; then
         shell_bin="/bin/bash"
@@ -319,6 +323,27 @@ EOF
     log "resolver configured with QEMU user-mode DNS fallback"
 }
 
+setup_hosts() {
+    hostname_value="arrakis"
+
+    if [ -f "$HOSTNAME_FILE" ]; then
+        hostname_value="$(cat "$HOSTNAME_FILE")"
+    fi
+
+    cat > "$HOSTS_FILE" <<EOF
+127.0.0.1 localhost
+127.0.1.1 $hostname_value
+
+10.0.2.2 host.qemu.internal host.local host.docker.internal host.containers.internal
+
+::1 localhost ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+EOF
+
+    log "hosts configured with QEMU host gateway aliases"
+}
+
 record_persistent_boot() {
     echo "booted from persistent rootfs" > /var/lib/amazonspiceox/rootfs-state
     sync 2>/dev/null || true
@@ -525,6 +550,7 @@ set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_HOSTNAME_READY"
 setup_network
 set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_NETWORK_READY"
 setup_resolver
+setup_hosts
 record_persistent_boot
 run_requested_smoke
 finish_requested_smoke

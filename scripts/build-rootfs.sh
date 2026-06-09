@@ -425,6 +425,22 @@ if [ -f "$rootfs_dir/usr/local/bin/asox-terminal" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-terminal"
 fi
 
+if [ -f "$rootfs_dir/usr/local/bin/asox-browser" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-browser"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/xdg-open" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/xdg-open"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/x-www-browser" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/x-www-browser"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/sensible-browser" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/sensible-browser"
+fi
+
 if [ -f "$rootfs_dir/usr/local/bin/gui-run" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/gui-run"
 fi
@@ -447,6 +463,11 @@ fi
 
 if [ -f "$rootfs_dir/usr/local/bin/ssm-powerconnect" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/ssm-powerconnect"
+fi
+
+if [ -d "$rootfs_dir/etc/sudoers.d" ]; then
+    chmod 0750 "$rootfs_dir/etc/sudoers.d"
+    find "$rootfs_dir/etc/sudoers.d" -type f -exec chmod 0440 {} \;
 fi
 
 validate_profile_artifacts "$rootfs_dir" "$profile_name"

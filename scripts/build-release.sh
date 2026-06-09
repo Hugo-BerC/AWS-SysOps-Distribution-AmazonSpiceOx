@@ -14,8 +14,9 @@ out_dir="${10:?output directory required}"
 qemu_append="${11:?QEMU append required}"
 qemu_memory="${12:?QEMU memory required}"
 qemu_keyboard_layout="${13:-${QEMU_KEYBOARD_LAYOUT:-es}}"
+release_flavor="${14:-$profile_id}"
 
-release_name="amazonspiceox-${version}-${debian_arch}-${profile_id}"
+release_name="amazonspiceox-${version}-${debian_arch}-${release_flavor}"
 release_parent="$out_dir/release"
 release_dir="$release_parent/$release_name"
 archive_path="$release_parent/$release_name.tar.gz"
@@ -111,6 +112,7 @@ architecture=$debian_arch
 profile_id=$profile_id
 profile_name=$profile_name
 profiles=$profiles
+release_flavor=$release_flavor
 git_ref=$git_ref
 kernel_image=bzImage
 initramfs=rootfs.cpio.gz
@@ -153,10 +155,25 @@ Inside the guest, the full release profile includes:
 - Chromium / Tkinter GUI runtime
 - SSM-PowerConnect launcher
 
+QEMU host gateway aliases inside the guest:
+
+\`\`\`text
+host.qemu.internal
+host.local
+host.docker.internal
+host.containers.internal
+\`\`\`
+
+AWS SSO browser flows use Chromium through:
+
+\`\`\`text
+BROWSER=/usr/local/bin/asox-browser
+\`\`\`
+
 Run the desktop tool from arrakis with:
 
 \`\`\`sh
-ASOX_GUI_BACKEND=local-x11 ssm-powerconnect
+ssm-powerconnect
 \`\`\`
 
 The graphical QEMU launcher defaults to Spanish keyboard layout:

@@ -51,6 +51,12 @@ if ! ping -c 1 10.0.2.2; then
     exit 1
 fi
 
+if ! getent hosts host.qemu.internal; then
+    echo "[network-smoke] host.qemu.internal alias is missing"
+    mark_status "AMAZONSPICEOX_NETWORK_SMOKE_HOST_ALIAS_FAILED"
+    exit 1
+fi
+
 if ! getent hosts deb.debian.org; then
     echo "[network-smoke] DNS lookup failed for deb.debian.org"
     mark_status "AMAZONSPICEOX_NETWORK_SMOKE_DNS_FAILED"
