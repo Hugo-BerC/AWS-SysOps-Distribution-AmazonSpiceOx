@@ -1,0 +1,40 @@
+diff --git a/ssm_powerconnect.py b/ssm_powerconnect.py
+--- a/ssm_powerconnect.py
++++ b/ssm_powerconnect.py
+@@ -180,6 +180,8 @@ def build_terminal_command(terminal_path, command):
+     )
+     terminal_name = os.path.basename(terminal_path)
+ 
++    if terminal_name == "asox-terminal":
++        return [terminal_path, "-e", shell_path, "-lc", hold_command]
+     if terminal_name in ("xterm", "uxterm", "x-terminal-emulator"):
+         return [terminal_path, "-T", "SSM-PowerConnect", "-e", shell_path, "-lc", hold_command]
+     if terminal_name in ("gnome-terminal", "kgx"):
+@@ -210,6 +212,19 @@ def open_terminal_command(command):
+         return ""
+ 
+ 
++def terminal_environment():
++    env = aws_environment()
++    env.setdefault("ASOX_TERMINAL_TABS", "1")
++    env.setdefault("ASOX_TERMINAL_TMUX_SESSION", "ssm-powerconnect")
++    env.setdefault("ASOX_TERMINAL_WINDOW_NAME", "PowerConnect")
++    env.setdefault("SHELL", "/bin/bash")
++    env.setdefault("LANG", "en_US.UTF-8")
++    env.setdefault("LC_CTYPE", "en_US.UTF-8")
++    env.setdefault("LC_COLLATE", "en_US.UTF-8")
++    env.setdefault("TERM", "xterm-256color")
++    return env
++
++
+ def open_terminal_command(command):
+     if not os.environ.get("DISPLAY"):
+         messagebox.showerror(
+@@ -222,6 +233,6 @@ def open_terminal_command(command):
+         messagebox.showerror("Wake Up!!!", "No graphical terminal found. Install xterm in the AmazonSpiceOx image.")
+         return False
+ 
+-    subprocess.Popen(build_terminal_command(terminal_path, command), start_new_session=True)
++    subprocess.Popen(build_terminal_command(terminal_path, command), env=terminal_environment(), start_new_session=True)
+     return True
+ 

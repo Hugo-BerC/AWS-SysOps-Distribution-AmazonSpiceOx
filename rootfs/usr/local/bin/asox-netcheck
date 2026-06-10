@@ -37,6 +37,18 @@ echo "[asox-netcheck] getent hosts deb.debian.org"
 getent hosts deb.debian.org 2>/dev/null || true
 echo
 
+if [ -n "${ASOX_NETCHECK_DNS_HOST:-}" ]; then
+    echo "[asox-netcheck] getent hosts $ASOX_NETCHECK_DNS_HOST"
+    getent hosts "$ASOX_NETCHECK_DNS_HOST" 2>/dev/null || true
+    echo
+
+    if command -v curl >/dev/null 2>&1; then
+        echo "[asox-netcheck] curl https://$ASOX_NETCHECK_DNS_HOST/"
+        curl --connect-timeout 5 --max-time 10 -I "https://$ASOX_NETCHECK_DNS_HOST/" || true
+        echo
+    fi
+fi
+
 echo "[asox-netcheck] ping 10.0.2.2"
 ping -c 1 10.0.2.2 2>/dev/null || true
 echo

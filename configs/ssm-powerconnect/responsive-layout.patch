@@ -1,0 +1,58 @@
+diff --git a/ssm_powerconnect.py b/ssm_powerconnect.py
+--- a/ssm_powerconnect.py
++++ b/ssm_powerconnect.py
+@@ -238,6 +238,32 @@ def open_terminal_command(command):
+     return True
+ 
+ 
++def resize_instance_tree(event=None):
++    if "tree" not in globals():
++        return
++
++    width = tree.winfo_width()
++    if event is not None and getattr(event, "width", 0):
++        width = event.width
++
++    available = max(width - 28, 760)
++    columns = (
++        ("Name", 0.44, 240, "w"),
++        ("InstanceID", 0.25, 180, "w"),
++        ("PrivateIP", 0.17, 130, "w"),
++        ("InstanceState", 0.14, 110, "center"),
++    )
++
++    for column_name, ratio, min_width, anchor in columns:
++        tree.column(
++            column_name,
++            width=max(int(available * ratio), min_width),
++            minwidth=min_width,
++            anchor=anchor,
++            stretch=True,
++        )
++
++
+ def get_skin_path():
+     script_dir = os.path.dirname(os.path.abspath(__file__))
+     bundle_dir = getattr(sys, "_MEIPASS", None)
+@@ -866,7 +891,7 @@ def main():
+     root = tk.Tk()
+     root.title(f"{APP_NAME} for AmazonSpiceOx")
+     root.geometry("1280x760")
+-    root.minsize(1080, 680)
++    root.minsize(900, 560)
+     root.configure(bg=BG_COLOR)
+     root.option_add("*Font", FONT)
+ 
+@@ -967,9 +992,11 @@ def main():
+     tree.configure(yscrollcommand=tree_scroll.set)
+     tree.grid(row=0, column=0, sticky="nsew")
+     tree_scroll.grid(row=0, column=1, sticky="ns")
++    tree.bind("<Configure>", resize_instance_tree)
++    root.after(100, resize_instance_tree)
+ 
+     tunnel_panel = tk.Frame(powertunnel_frame, bg=PANEL_COLOR, padx=24, pady=24)
+-    tunnel_panel.pack(anchor="n", fill="x", padx=18, pady=18)
++    tunnel_panel.pack(anchor="n", fill="x", expand=True, padx=18, pady=18)
+     tunnel_panel.grid_columnconfigure(1, weight=1)
+     tk.Label(tunnel_panel, text="Port forwarding", font=FONT_TITLE, bg=PANEL_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, columnspan=3, pady=(0, 14), sticky="w")
+     tk.Label(tunnel_panel, text="Local port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=1, column=0, padx=(0, 12), pady=6, sticky="w")

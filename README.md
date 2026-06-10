@@ -318,6 +318,33 @@ Inside the guest:
 ASOX_GUI_BACKEND=local-x11 ssm-powerconnect
 ```
 
+### WSL Import
+
+Release packaging also emits a sibling WSL rootfs archive and installer:
+
+```text
+amazonspiceox-0.1.0-amd64-full-wsl-rootfs.tar.gz
+amazonspiceox-0.1.0-amd64-full-install-wsl.ps1
+```
+
+Import it from PowerShell:
+
+```powershell
+.\amazonspiceox-0.1.0-amd64-full-install-wsl.ps1
+wsl -d AmazonSpiceOx
+```
+
+Or manually:
+
+```powershell
+wsl --import AmazonSpiceOx "$env:LOCALAPPDATA\AmazonSpiceOx\wsl" .\amazonspiceox-0.1.0-amd64-full-wsl-rootfs.tar.gz --version 2
+wsl -d AmazonSpiceOx
+```
+
+In WSL mode, AmazonSpiceOx uses the host WSL kernel instead of the bundled QEMU
+kernel/initramfs. On Windows with WSLg, GUI apps such as `chromium` and
+`ssm-powerconnect` can open directly without `run-gui.sh`.
+
 ## Profiles and Manifests
 
 The rootfs is package-driven and profile-aware.
@@ -978,6 +1005,54 @@ Then open WSL again and rerun the build. The post-bootstrap package installer
 also uses a temporary base-only Debian source list during image assembly to
 avoid `trixie-security` and `trixie-updates` clock skew blocking packages such
 as `awscli` and `docker.io`.
+
+Inside AmazonSpiceOx, check guest/host clock drift with:
+
+```bash
+asox-timecheck
+```
+
+QEMU launches pass the host UTC epoch to the guest and use an UTC RTC by
+default. To override the RTC manually:
+
+```bash
+QEMU_RTC="base=utc,clock=host" make run-only ASOX_PROFILES="$PROFILE"
+```
+
+If DNS resolution fails inside AmazonSpiceOx, repair the resolver with:
+
+```bash
+asox-dns-fix
+asox-netcheck
+```
+
+The default resolver order is Google DNS, Cloudflare DNS, then QEMU's user-mode
+DNS proxy when running under QEMU. WSL release images disable automatic
+`resolv.conf` regeneration so the fallback resolver remains persistent.
+
+If WSL itself drifts after suspend or around midday, restart the WSL VM from
+PowerShell:
+
+```powershell
+wsl --shutdown
+wsl -d AmazonSpiceOx
+```
+
+If Bash prints locale warnings such as:
+
+```text
+setlocale: LC_CTYPE: cannot change locale (en_US.UTF-8)
+```
+
+rebuild the rootfs with the current base manifest. The image now includes
+`locales` and generates both `en_US.UTF-8` and `es_ES.UTF-8` during rootfs
+assembly.
+
+```bash
+PROFILE="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect"
+sudo -E make rootfs ASOX_PROFILES="$PROFILE"
+sudo -E make image ASOX_PROFILES="$PROFILE"
+```
 
 ## Legacy Toolchain Work
 

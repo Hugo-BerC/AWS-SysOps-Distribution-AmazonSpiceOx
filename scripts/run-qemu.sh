@@ -20,6 +20,9 @@ qemu_cpu="${QEMU_CPU:-auto}"
 qemu_smp="${QEMU_SMP:-2}"
 qemu_clipboard="${QEMU_CLIPBOARD:-auto}"
 qemu_host_ip="${QEMU_HOST_IP:-auto}"
+qemu_host_dns="${QEMU_HOST_DNS:-auto}"
+qemu_host_time_epoch="${QEMU_HOST_TIME_EPOCH:-auto}"
+qemu_rtc="${QEMU_RTC:-base=utc,clock=host}"
 
 netdev_spec="user,id=net0"
 
@@ -54,6 +57,23 @@ detect_host_ip() {
     printf '%s\n' ""
 }
 
+detect_host_dns() {
+    awk '/^nameserver[[:space:]]/ { print $2; exit }' /etc/resolv.conf 2>/dev/null || true
+}
+
+detect_host_time_epoch() {
+    if [ -n "${WSL_INTEROP:-}" ] || grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+        if command -v powershell.exe >/dev/null 2>&1; then
+            powershell.exe -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()" 2>/dev/null \
+                | tr -d '\r' \
+                | awk '/^[0-9]+$/ { print; exit }'
+            return 0
+        fi
+    fi
+
+    date -u +%s 2>/dev/null || true
+}
+
 supports_qemu_vdagent() {
     "$qemu_bin" -chardev help 2>&1 | grep -q 'qemu-vdagent'
 }
@@ -76,6 +96,26 @@ if [ -n "$qemu_host_ip" ]; then
     qemu_append="$qemu_append asox.host_ip=$qemu_host_ip"
 fi
 
+if [ "$qemu_host_dns" = "auto" ]; then
+    qemu_host_dns="$(detect_host_dns)"
+fi
+
+if [ -n "$qemu_host_dns" ]; then
+    qemu_append="$qemu_append asox.host_dns=$qemu_host_dns"
+fi
+
+if [ "$qemu_host_time_epoch" = "auto" ]; then
+    qemu_host_time_epoch="$(detect_host_time_epoch)"
+fi
+
+case "$qemu_host_time_epoch" in
+    ""|*[!0-9]*)
+        ;;
+    *)
+        qemu_append="$qemu_append asox.host_time_epoch=$qemu_host_time_epoch"
+        ;;
+esac
+
 if [ "$qemu_accel" = "auto" ]; then
     qemu_accel="$(detect_accel)"
 fi
@@ -92,6 +132,10 @@ set -- \
     -no-reboot \
     -netdev "$netdev_spec" \
     -device virtio-net-pci,netdev=net0
+
+if [ -n "$qemu_rtc" ]; then
+    set -- "$@" -rtc "$qemu_rtc"
+fi
 
 case "$qemu_accel" in
     ""|none|off)

@@ -5,12 +5,38 @@ scrollback="${ASOX_TERMINAL_SCROLLBACK:-20000}"
 font="${ASOX_TERMINAL_FONT:-DejaVu Sans Mono}"
 font_size="${ASOX_TERMINAL_FONT_SIZE:-11}"
 geometry="${ASOX_TERMINAL_GEOMETRY:-132x40}"
-foreground="${ASOX_TERMINAL_FOREGROUND:-#d8dee9}"
-background="${ASOX_TERMINAL_BACKGROUND:-#0b0f14}"
-cursor_color="${ASOX_TERMINAL_CURSOR_COLOR:-#88c0d0}"
+foreground="${ASOX_TERMINAL_FOREGROUND:-#f2d28b}"
+background="${ASOX_TERMINAL_BACKGROUND:-#0b0d0e}"
+cursor_color="${ASOX_TERMINAL_CURSOR_COLOR:-#ffd75f}"
+tabbed_mode="${ASOX_TERMINAL_TABS:-0}"
+tmux_session="${ASOX_TERMINAL_TMUX_SESSION:-amazonspiceox}"
+tmux_window_name="${ASOX_TERMINAL_WINDOW_NAME:-PowerConnect}"
+locale="${LANG:-en_US.UTF-8}"
+shell_bin="${SHELL:-/bin/bash}"
 
-if command -v xterm >/dev/null 2>&1; then
-    exec xterm \
+quote_for_shell() {
+    printf "'%s'" "$(printf "%s" "$1" | sed "s/'/'\\\\''/g")"
+}
+
+build_command_string() {
+    first=1
+    command_string=""
+
+    for arg in "$@"; do
+        quoted_arg="$(quote_for_shell "$arg")"
+        if [ "$first" -eq 1 ]; then
+            command_string="$quoted_arg"
+            first=0
+        else
+            command_string="$command_string $quoted_arg"
+        fi
+    done
+
+    printf '%s' "$command_string"
+}
+
+run_xterm() {
+    exec env LANG="$locale" LC_CTYPE="${LC_CTYPE:-$locale}" LC_COLLATE="${LC_COLLATE:-$locale}" SHELL="$shell_bin" xterm \
         -geometry "$geometry" \
         -fa "$font" \
         -fs "$font_size" \
@@ -21,10 +47,79 @@ if command -v xterm >/dev/null 2>&1; then
         -rightbar \
         -sl "$scrollback" \
         -xrm "XTerm*termName: xterm-256color" \
+        -xrm "XTerm*locale: true" \
+        -xrm "XTerm*utf8: 2" \
         -xrm "XTerm*alternateScroll: false" \
         -xrm "XTerm*scrollTtyOutput: false" \
         -xrm "XTerm*scrollKey: true" \
         "$@"
+}
+
+open_tmux_host_window() {
+    marker="/tmp/asox-terminal-$tmux_session.xterm"
+
+    if [ -f "$marker" ]; then
+        old_pid="$(cat "$marker" 2>/dev/null || true)"
+        if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    (
+        env LANG="$locale" LC_CTYPE="${LC_CTYPE:-$locale}" LC_COLLATE="${LC_COLLATE:-$locale}" SHELL="$shell_bin" xterm \
+            -T "$tmux_session" \
+            -geometry "$geometry" \
+            -fa "$font" \
+            -fs "$font_size" \
+            -fg "$foreground" \
+            -bg "$background" \
+            -cr "$cursor_color" \
+            -sb \
+            -rightbar \
+            -sl "$scrollback" \
+            -xrm "XTerm*termName: xterm-256color" \
+            -xrm "XTerm*locale: true" \
+            -xrm "XTerm*utf8: 2" \
+            -xrm "XTerm*alternateScroll: false" \
+            -xrm "XTerm*scrollTtyOutput: false" \
+            -xrm "XTerm*scrollKey: true" \
+            -e tmux attach-session -t "$tmux_session"
+    ) >/tmp/asox-terminal-xterm.log 2>&1 &
+
+    echo "$!" > "$marker"
+}
+
+run_tmux_tabbed() {
+    if ! command -v tmux >/dev/null 2>&1 || ! command -v xterm >/dev/null 2>&1; then
+        run_xterm "$@"
+    fi
+
+    if [ "$#" -gt 0 ] && [ "$1" = "-e" ]; then
+        shift
+    fi
+
+    if [ "$#" -eq 0 ]; then
+        set -- "$shell_bin" --login
+    fi
+
+    command_string="$(build_command_string "$@")"
+
+    if ! tmux has-session -t "$tmux_session" 2>/dev/null; then
+        tmux new-session -d -s "$tmux_session" -n "$tmux_window_name" "$command_string"
+    else
+        tmux new-window -t "$tmux_session:" -n "$tmux_window_name" "$command_string"
+    fi
+
+    open_tmux_host_window
+    exit 0
+}
+
+if [ "$tabbed_mode" = "1" ] || [ "$tabbed_mode" = "true" ]; then
+    run_tmux_tabbed "$@"
+fi
+
+if command -v xterm >/dev/null 2>&1; then
+    run_xterm "$@"
 fi
 
 exec /bin/bash --login

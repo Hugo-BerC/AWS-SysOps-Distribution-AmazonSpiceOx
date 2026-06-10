@@ -37,12 +37,34 @@ Implemented:
 - GUI profile now includes `xclip` and `asox-clipboard` for clipboard
   diagnostics and a hidden-prompt fallback when host clipboard sync is not
   available
+- `asox-clipboard` now auto-selects the local guest X11 display when the
+  inherited host X11 `DISPLAY` is not reachable
 - network smoke now validates the host gateway alias
 - AWS CLI smoke now uses temporary empty AWS config and credentials files, so
   stale local `/root/.aws` state cannot break release validation
 - GUI profile now defaults `ASOX_GUI_BACKEND=auto`
 - `asox-browser`, `xdg-open`, `x-www-browser`, and `sensible-browser` wrappers
   route browser launches to Chromium for AWS SSO and other auth flows
+- SSM-PowerConnect now refreshes EC2 instances through the AWS CLI SSO cache and
+  reports the real AWS error instead of always showing a generic SSO-login
+  warning
+- SSM-PowerConnect terminal actions now open as tmux tabs inside a shared xterm
+  window instead of spawning one standalone xterm per action
+- SSM-PowerConnect now forces the AmazonSpiceOx tabbed terminal environment for
+  child terminal actions, even when the app is launched outside the wrapper
+- SSM-PowerConnect now resizes its EC2 instance table columns with the available
+  window width and has a smaller minimum window size for QEMU/WSLg displays
+- release packaging now emits a sibling WSL import rootfs archive and PowerShell
+  import helper so AmazonSpiceOx can run as a normal WSL distro without QEMU
+- root home now includes `create-aws-config.sh`, an interactive helper that
+  captures default admin/read access keys, lists AWS Organizations accounts,
+  and builds SSO profiles in `~/.aws/config`
+- `create-aws-config.sh` no longer ships environment-specific SSO URLs, Windows
+  sync logic, or extra local config includes; it now prompts for the SSO URL and
+  an optional STS session token inside the distro
+- QEMU boot now passes the detected host DNS into the guest, and stage 2 writes
+  host/public/QEMU resolver fallbacks so AWS SSO domains do not depend only on
+  the default QEMU DNS proxy
 - `asox-terminal` now opens xterm with a dark theme, larger geometry, scrollbar,
   and `xterm-256color`
 - release kernel command line defaults remove `earlyprintk` and add
@@ -50,6 +72,19 @@ Implemented:
 - release artifact naming now uses a clean flavor slug such as
   `amazonspiceox-0.1.0-amd64-full.tar.gz`, with full profile details kept in
   `BUILDINFO`
+- QEMU now passes the host UTC epoch into the guest and uses an UTC host-backed
+  RTC by default, reducing apt/AWS failures caused by clock skew
+- `asox-timecheck` now reports guest/host clock drift and gives the WSL recovery
+  command when the clock is stale
+- DNS defaults now prefer public fallback resolvers before QEMU's DNS proxy,
+  WSL imports keep a persistent `resolv.conf`, and `asox-dns-fix` can repair
+  resolver state from inside the distro
+- base images now install and generate `en_US.UTF-8` and `es_ES.UTF-8`, fixing
+  Bash locale warnings, mojibake in the MOTD, and tmux/xterm UTF-8 rendering
+- root Bash now ships a Dune-inspired prompt with yellow `arrakis` hostname,
+  sand/spice colors, completion, and practical aliases
+- `asox-terminal` now forces UTF-8 locale hints, uses Dune terminal colors, and
+  launches PowerConnect child sessions with Bash instead of falling back to `sh`
 
 ## 2026-06-07 - First Release Packaging
 

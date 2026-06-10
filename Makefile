@@ -504,7 +504,7 @@ $(XPRA_KEY_VERIFY_STAMP): scripts/fetch-xpra-key.sh | $(DL_DIR)
 	sh scripts/fetch-xpra-key.sh "$(abspath $(XPRA_KEY_FILE))" "$(XPRA_KEY_FINGERPRINT)"
 	touch "$@"
 
-$(SSM_POWERCONNECT_FETCH_STAMP): scripts/fetch-ssm-powerconnect.sh configs/ssm-powerconnect/ui-polish.patch configs/ssm-powerconnect/aws-config-profiles.patch | $(DL_DIR)
+$(SSM_POWERCONNECT_FETCH_STAMP): scripts/fetch-ssm-powerconnect.sh configs/ssm-powerconnect/ui-polish.patch configs/ssm-powerconnect/aws-config-profiles.patch configs/ssm-powerconnect/aws-cli-refresh.patch configs/ssm-powerconnect/terminal-tabs.patch configs/ssm-powerconnect/responsive-layout.patch | $(DL_DIR)
 	sh scripts/fetch-ssm-powerconnect.sh "$(SSM_POWERCONNECT_REPO)" "$(SSM_POWERCONNECT_REF)" "$(abspath $(SSM_POWERCONNECT_DIR))"
 	touch "$@"
 
