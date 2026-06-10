@@ -401,8 +401,16 @@ if [ -f "$rootfs_dir/usr/local/bin/asox-netcheck" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-netcheck"
 fi
 
+if [ -f "$rootfs_dir/usr/local/bin/asox-dns-fix" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-dns-fix"
+fi
+
 if [ -f "$rootfs_dir/usr/local/bin/asox-termcheck" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/asox-termcheck"
+fi
+
+if [ -f "$rootfs_dir/usr/local/bin/asox-timecheck" ]; then
+    chmod 0755 "$rootfs_dir/usr/local/bin/asox-timecheck"
 fi
 
 if [ -f "$rootfs_dir/usr/local/bin/asox-console" ]; then
@@ -471,6 +479,14 @@ fi
 
 if [ -f "$rootfs_dir/usr/local/bin/ssm-powerconnect" ]; then
     chmod 0755 "$rootfs_dir/usr/local/bin/ssm-powerconnect"
+fi
+
+if [ -f "$rootfs_dir/root/create-aws-config.sh" ]; then
+    chmod 0755 "$rootfs_dir/root/create-aws-config.sh"
+fi
+
+if [ -x "$rootfs_dir/usr/sbin/locale-gen" ] && [ -f "$rootfs_dir/etc/locale.gen" ]; then
+    chroot "$rootfs_dir" /usr/sbin/locale-gen
 fi
 
 if [ -d "$rootfs_dir/etc/sudoers.d" ]; then

@@ -12,6 +12,9 @@ tmp_dir="$out_dir.extract"
 app_dir="$out_dir/AmazonSpiceOx"
 ui_patch_file="${SSM_POWERCONNECT_UI_PATCH_FILE:-configs/ssm-powerconnect/ui-polish.patch}"
 aws_profiles_patch_file="${SSM_POWERCONNECT_AWS_PROFILES_PATCH_FILE:-configs/ssm-powerconnect/aws-config-profiles.patch}"
+aws_cli_refresh_patch_file="${SSM_POWERCONNECT_AWS_CLI_REFRESH_PATCH_FILE:-configs/ssm-powerconnect/aws-cli-refresh.patch}"
+terminal_tabs_patch_file="${SSM_POWERCONNECT_TERMINAL_TABS_PATCH_FILE:-configs/ssm-powerconnect/terminal-tabs.patch}"
+responsive_layout_patch_file="${SSM_POWERCONNECT_RESPONSIVE_LAYOUT_PATCH_FILE:-configs/ssm-powerconnect/responsive-layout.patch}"
 
 case "$ui_patch_file" in
     /*)
@@ -28,6 +31,33 @@ case "$aws_profiles_patch_file" in
         ;;
     *)
         aws_profiles_patch_path="$(pwd)/$aws_profiles_patch_file"
+        ;;
+esac
+
+case "$aws_cli_refresh_patch_file" in
+    /*)
+        aws_cli_refresh_patch_path="$aws_cli_refresh_patch_file"
+        ;;
+    *)
+        aws_cli_refresh_patch_path="$(pwd)/$aws_cli_refresh_patch_file"
+        ;;
+esac
+
+case "$terminal_tabs_patch_file" in
+    /*)
+        terminal_tabs_patch_path="$terminal_tabs_patch_file"
+        ;;
+    *)
+        terminal_tabs_patch_path="$(pwd)/$terminal_tabs_patch_file"
+        ;;
+esac
+
+case "$responsive_layout_patch_file" in
+    /*)
+        responsive_layout_patch_path="$responsive_layout_patch_file"
+        ;;
+    *)
+        responsive_layout_patch_path="$(pwd)/$responsive_layout_patch_file"
         ;;
 esac
 
@@ -138,6 +168,45 @@ if [ -f "$aws_profiles_patch_path" ]; then
     (
         cd "$app_dir"
         patch -p1 < "$aws_profiles_patch_path"
+    )
+fi
+
+if [ -f "$aws_cli_refresh_patch_path" ]; then
+    if ! command -v patch >/dev/null 2>&1; then
+        echo "error: patch is required to apply $aws_cli_refresh_patch_path" >&2
+        exit 1
+    fi
+
+    echo "Applying AmazonSpiceOx SSM-PowerConnect AWS CLI refresh patch"
+    (
+        cd "$app_dir"
+        patch -p1 < "$aws_cli_refresh_patch_path"
+    )
+fi
+
+if [ -f "$terminal_tabs_patch_path" ]; then
+    if ! command -v patch >/dev/null 2>&1; then
+        echo "error: patch is required to apply $terminal_tabs_patch_path" >&2
+        exit 1
+    fi
+
+    echo "Applying AmazonSpiceOx SSM-PowerConnect terminal tabs patch"
+    (
+        cd "$app_dir"
+        patch -p1 < "$terminal_tabs_patch_path"
+    )
+fi
+
+if [ -f "$responsive_layout_patch_path" ]; then
+    if ! command -v patch >/dev/null 2>&1; then
+        echo "error: patch is required to apply $responsive_layout_patch_path" >&2
+        exit 1
+    fi
+
+    echo "Applying AmazonSpiceOx SSM-PowerConnect responsive layout patch"
+    (
+        cd "$app_dir"
+        patch -p1 < "$responsive_layout_patch_path"
     )
 fi
 

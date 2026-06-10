@@ -16,6 +16,8 @@ PROFILE_FILE=/etc/amazonspiceox-profile
 RESOLV_CONF=/etc/resolv.conf
 HOSTS_FILE=/etc/hosts
 HOST_OS_IP=
+HOST_DNS=
+HOST_TIME_EPOCH=
 ACTIVE_PROFILE=base
 SMOKE_MODE=none
 SMOKE_STATE_DIR=/var/lib/amazonspiceox/smoke
@@ -120,8 +122,29 @@ read_boot_cmdline() {
             asox.host_ip=*)
                 HOST_OS_IP="${arg#asox.host_ip=}"
                 ;;
+            asox.host_dns=*)
+                HOST_DNS="${arg#asox.host_dns=}"
+                ;;
+            asox.host_time_epoch=*)
+                HOST_TIME_EPOCH="${arg#asox.host_time_epoch=}"
+                ;;
         esac
     done
+}
+
+setup_clock() {
+    case "$HOST_TIME_EPOCH" in
+        ""|*[!0-9]*)
+            return 0
+            ;;
+    esac
+
+    if date -u -s "@$HOST_TIME_EPOCH" >/tmp/asox-time-sync.log 2>&1; then
+        log "system clock synced from host: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        return 0
+    fi
+
+    log "host clock sync skipped; see /tmp/asox-time-sync.log"
 }
 
 configure_smoke_paths() {
@@ -347,16 +370,30 @@ setup_network() {
 }
 
 setup_resolver() {
-    if [ -s "$RESOLV_CONF" ] && grep -q '^nameserver[[:space:]]' "$RESOLV_CONF" 2>/dev/null; then
-        log "resolver already configured"
-        return 0
+    tmp_resolv=/tmp/resolv.conf.amazonspiceox
+    : > "$tmp_resolv"
+
+    add_nameserver() {
+        server="$1"
+        [ -n "$server" ] || return 0
+        grep -Eq "^[[:space:]]*nameserver[[:space:]]+$server([[:space:]]|$)" "$tmp_resolv" 2>/dev/null && return 0
+        printf 'nameserver %s\n' "$server" >> "$tmp_resolv"
+    }
+
+    add_nameserver 8.8.8.8
+    add_nameserver 1.1.1.1
+    add_nameserver "$HOST_DNS"
+    add_nameserver 10.0.2.3
+
+    if [ -s "$RESOLV_CONF" ]; then
+        awk '/^nameserver[[:space:]]/ { print $2 }' "$RESOLV_CONF" 2>/dev/null | while IFS= read -r server; do
+            add_nameserver "$server"
+        done
     fi
 
-    cat > "$RESOLV_CONF" <<'EOF'
-nameserver 10.0.2.3
-nameserver 1.1.1.1
-EOF
-    log "resolver configured with QEMU user-mode DNS fallback"
+    printf 'options timeout:1 attempts:2\n' >> "$tmp_resolv"
+    mv "$tmp_resolv" "$RESOLV_CONF"
+    log "resolver configured with host/public/QEMU DNS fallbacks"
 }
 
 setup_hosts() {
@@ -584,6 +621,7 @@ load_profile
 mount_once proc /proc
 mount_once sysfs /sys
 read_boot_cmdline
+setup_clock
 configure_smoke_paths
 set_smoke_status "AMAZONSPICEOX_SMOKE_INIT_STAGE2_READY"
 setup_cgroups

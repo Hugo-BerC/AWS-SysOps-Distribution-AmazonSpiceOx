@@ -2,11 +2,70 @@
 set -eu
 
 command_name="${1:-doctor}"
-display_value="${DISPLAY:-:0}"
+
+display_socket_exists() {
+    display="$1"
+    display_num="${display#localhost}"
+    display_num="${display_num#127.0.0.1}"
+    display_num="${display_num#:}"
+    display_num="${display_num%%.*}"
+    [ -n "$display_num" ] || return 1
+    [ -S "/tmp/.X11-unix/X$display_num" ]
+}
+
+display_ready() {
+    display="$1"
+    [ -n "$display" ] || return 1
+
+    if command -v xdpyinfo >/dev/null 2>&1; then
+        DISPLAY="$display" xdpyinfo >/dev/null 2>&1 && return 0
+    fi
+
+    if command -v xset >/dev/null 2>&1; then
+        DISPLAY="$display" xset q >/dev/null 2>&1 && return 0
+    fi
+
+    case "$display" in
+        :*|localhost:*|127.0.0.1:*)
+            display_socket_exists "$display"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+select_display() {
+    seen=" "
+
+    for candidate in "${ASOX_CLIPBOARD_DISPLAY:-}" "${DISPLAY:-}" :0 :1 :100; do
+        [ -n "$candidate" ] || continue
+        case "$seen" in
+            *" $candidate "*) continue ;;
+        esac
+        seen="$seen$candidate "
+
+        if display_ready "$candidate"; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    printf '%s\n' "${DISPLAY:-:0}"
+    return 1
+}
+
+display_value="$(select_display || true)"
 
 print_status() {
     echo "DISPLAY=${DISPLAY:-<unset>}"
+    echo "ASOX_CLIPBOARD_DISPLAY=${ASOX_CLIPBOARD_DISPLAY:-<unset>}"
     echo "effective DISPLAY for xclip=$display_value"
+    if display_ready "$display_value"; then
+        echo "display check: OK"
+    else
+        echo "display check: FAILED"
+    fi
     echo
 
     echo "[virtio port]"

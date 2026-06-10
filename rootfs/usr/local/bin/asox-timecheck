@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+guest_epoch="$(date -u +%s 2>/dev/null || echo 0)"
+guest_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+host_epoch=""
+host_iso=""
+
+if grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null && command -v powershell.exe >/dev/null 2>&1; then
+    host_epoch="$(
+        powershell.exe -NoProfile -Command "[DateTimeOffset]::UtcNow.ToUnixTimeSeconds()" 2>/dev/null \
+            | tr -d '\r' \
+            | awk '/^[0-9]+$/ { print; exit }'
+    )"
+    host_iso="$(
+        powershell.exe -NoProfile -Command "[DateTimeOffset]::UtcNow.UtcDateTime.ToString('yyyy-MM-ddTHH:mm:ssZ')" 2>/dev/null \
+            | tr -d '\r' \
+            | awk 'NF { print; exit }'
+    )"
+fi
+
+echo "guest UTC: $guest_iso"
+
+if [ -n "$host_epoch" ]; then
+    echo "host UTC:  ${host_iso:-unknown}"
+    drift=$((guest_epoch - host_epoch))
+    if [ "$drift" -lt 0 ]; then
+        abs_drift=$((0 - drift))
+    else
+        abs_drift="$drift"
+    fi
+    echo "drift:     ${drift}s"
+
+    if [ "$abs_drift" -gt 5 ]; then
+        echo
+        echo "Clock drift detected."
+        echo "From PowerShell on the host, run:"
+        echo "  wsl --shutdown"
+        echo "Then start AmazonSpiceOx again."
+    fi
+else
+    echo "host UTC:  unavailable"
+    echo
+    echo "If this is QEMU, the launcher should pass asox.host_time_epoch automatically."
+    echo "If this is WSL and the clock looks wrong, run from PowerShell:"
+    echo "  wsl --shutdown"
+fi

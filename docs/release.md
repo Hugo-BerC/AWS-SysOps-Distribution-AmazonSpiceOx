@@ -46,6 +46,13 @@ amazonspiceox-<version>-amd64-full.tar.gz
 
 Detailed profile metadata remains in `BUILDINFO`.
 
+Release packaging also emits WSL import assets next to the QEMU bundle:
+
+```text
+amazonspiceox-<version>-amd64-full-wsl-rootfs.tar.gz
+amazonspiceox-<version>-amd64-full-install-wsl.ps1
+```
+
 ## Smoke Tests
 
 Recommended pre-release checks:
@@ -81,6 +88,25 @@ from the host when needed:
 ```bash
 QEMU_KEYBOARD_LAYOUT=us sh run-gui.sh
 ```
+
+## Import Into WSL
+
+From PowerShell:
+
+```powershell
+.\amazonspiceox-0.1.0-amd64-full-install-wsl.ps1
+wsl -d AmazonSpiceOx
+```
+
+Manual import:
+
+```powershell
+wsl --import AmazonSpiceOx "$env:LOCALAPPDATA\AmazonSpiceOx\wsl" .\amazonspiceox-0.1.0-amd64-full-wsl-rootfs.tar.gz --version 2
+wsl -d AmazonSpiceOx
+```
+
+WSL mode uses the host WSL kernel. The bundled `bzImage`, initramfs, and QEMU
+wrappers are only used by the QEMU release flow.
 
 ## Secret Guard
 

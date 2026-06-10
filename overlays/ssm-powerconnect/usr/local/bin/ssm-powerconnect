@@ -4,6 +4,16 @@ set -eu
 app_home="${SSM_POWERCONNECT_HOME:-/opt/ssm-powerconnect}"
 app_file="$app_home/ssm_powerconnect.py"
 
+export HOME="${HOME:-/root}"
+export AWS_SDK_LOAD_CONFIG="${AWS_SDK_LOAD_CONFIG:-1}"
+export AWS_EC2_METADATA_DISABLED="${AWS_EC2_METADATA_DISABLED:-true}"
+export AWS_PAGER="${AWS_PAGER:-}"
+export AWS_CONFIG_FILE="${AWS_CONFIG_FILE:-$HOME/.aws/config}"
+export AWS_SHARED_CREDENTIALS_FILE="${AWS_SHARED_CREDENTIALS_FILE:-$HOME/.aws/credentials}"
+export ASOX_TERMINAL_TABS="${ASOX_TERMINAL_TABS:-1}"
+export ASOX_TERMINAL_TMUX_SESSION="${ASOX_TERMINAL_TMUX_SESSION:-ssm-powerconnect}"
+export ASOX_TERMINAL_WINDOW_NAME="${ASOX_TERMINAL_WINDOW_NAME:-PowerConnect}"
+
 if [ ! -f "$app_file" ]; then
     echo "ssm-powerconnect: missing app file: $app_file" >&2
     exit 1

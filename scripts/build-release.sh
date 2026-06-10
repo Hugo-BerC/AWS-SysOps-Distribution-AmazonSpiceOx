@@ -20,6 +20,8 @@ release_name="amazonspiceox-${version}-${debian_arch}-${release_flavor}"
 release_parent="$out_dir/release"
 release_dir="$release_parent/$release_name"
 archive_path="$release_parent/$release_name.tar.gz"
+wsl_rootfs_archive_path="$release_parent/$release_name-wsl-rootfs.tar.gz"
+wsl_install_script_path="$release_parent/$release_name-install-wsl.ps1"
 
 for artifact in "$kernel_image" "$initramfs_image" "$rootfs_image"; do
     if [ ! -f "$artifact" ]; then
@@ -45,6 +47,57 @@ image_contains_guest_path() {
     printf '%s\n' "$stat_output" | grep -q '^Inode:'
 }
 
+create_wsl_rootfs_archive() {
+    if [ ! -d "$rootfs_dir" ]; then
+        echo "warning: rootfs directory not available; skipping WSL rootfs archive" >&2
+        return 0
+    fi
+
+    tmp_archive="$wsl_rootfs_archive_path.tmp"
+    rm -f "$tmp_archive" "$wsl_rootfs_archive_path"
+
+    create_archive_with() {
+        "$@" tar \
+            --numeric-owner \
+            --one-file-system \
+            --exclude='./.stamp' \
+            --exclude='./proc/*' \
+            --exclude='./sys/*' \
+            --exclude='./dev/*' \
+            --exclude='./run/*' \
+            --exclude='./tmp/*' \
+            --exclude='./var/tmp/*' \
+            --exclude='./root/.aws' \
+            --exclude='./root/.config/chromium-amazonspiceox' \
+            -C "$rootfs_dir" \
+            -czf "$tmp_archive" \
+            .
+    }
+
+    tar_log="$release_parent/$release_name-wsl-rootfs.tar.log"
+
+    if create_archive_with >"$tar_log" 2>&1; then
+        mv "$tmp_archive" "$wsl_rootfs_archive_path"
+        rm -f "$tar_log"
+        return 0
+    fi
+
+    rm -f "$tmp_archive"
+
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+        create_archive_with sudo
+        sudo chown "$(id -u):$(id -g)" "$tmp_archive" 2>/dev/null || true
+        mv "$tmp_archive" "$wsl_rootfs_archive_path"
+        rm -f "$tar_log"
+        return 0
+    fi
+
+    cat "$tar_log" >&2 2>/dev/null || true
+    rm -f "$tar_log"
+    echo "warning: could not create WSL rootfs archive; rerun release packaging after sudo credentials are cached" >&2
+    return 0
+}
+
 if [ -d "$rootfs_dir" ]; then
     fail_if_file_exists "$rootfs_dir/root/.aws/config"
     fail_if_file_exists "$rootfs_dir/root/.aws/credentials"
@@ -63,7 +116,7 @@ else
     echo "warning: could not inspect rootfs image for AWS state" >&2
 fi
 
-rm -rf "$release_dir" "$archive_path" "$archive_path.sha256"
+rm -rf "$release_dir" "$archive_path" "$archive_path.sha256" "$wsl_rootfs_archive_path" "$wsl_rootfs_archive_path.sha256" "$wsl_install_script_path"
 mkdir -p "$release_dir/scripts"
 
 cp "$kernel_image" "$release_dir/bzImage"
@@ -71,6 +124,31 @@ cp "$initramfs_image" "$release_dir/rootfs.cpio.gz"
 cp "$rootfs_image" "$release_dir/rootfs.ext4"
 cp scripts/run-qemu.sh "$release_dir/scripts/run-qemu.sh"
 chmod 0755 "$release_dir/scripts/run-qemu.sh"
+
+create_wsl_rootfs_archive
+
+cat > "$wsl_install_script_path" <<EOF
+param(
+    [string]\$Name = "AmazonSpiceOx",
+    [string]\$InstallDir = "\$env:LOCALAPPDATA\\AmazonSpiceOx\\wsl",
+    [string]\$Rootfs = "\$PSScriptRoot\\$release_name-wsl-rootfs.tar.gz"
+)
+
+\$ErrorActionPreference = "Stop"
+
+if (-not (Test-Path \$Rootfs)) {
+    throw "WSL rootfs archive not found: \$Rootfs"
+}
+
+if (wsl.exe -l -q | Where-Object { \$_ -eq \$Name }) {
+    throw "A WSL distro named '\$Name' already exists. Unregister it first or pass -Name."
+}
+
+New-Item -ItemType Directory -Force -Path \$InstallDir | Out-Null
+wsl.exe --import \$Name \$InstallDir \$Rootfs --version 2
+Write-Host "Imported \$Name into \$InstallDir"
+Write-Host "Start it with: wsl -d \$Name"
+EOF
 
 cat > "$release_dir/run.sh" <<EOF
 #!/bin/sh
@@ -222,12 +300,45 @@ Override it with another QEMU layout name if your host keyboard differs.
 Do not publish images that contain personal AWS config, credentials, or SSO
 cache. The release packager checks common AWS paths before creating this
 archive.
+
+## WSL import
+
+This release also emits a sibling WSL rootfs archive:
+
+\`\`\`text
+$release_name-wsl-rootfs.tar.gz
+\`\`\`
+
+Import it from PowerShell:
+
+\`\`\`powershell
+.\\$release_name-install-wsl.ps1
+wsl -d AmazonSpiceOx
+\`\`\`
+
+WSL uses the host WSL kernel instead of the bundled QEMU kernel/initramfs.
+On Windows with WSLg, GUI apps such as Chromium and SSM-PowerConnect can run
+directly from the imported distro without \`run-gui.sh\`.
 EOF
 
 (
     cd "$release_dir"
     sha256sum bzImage rootfs.cpio.gz rootfs.ext4 scripts/run-qemu.sh run.sh run-gui.sh BUILDINFO README.md > SHA256SUMS
 )
+
+if [ -f "$wsl_rootfs_archive_path" ]; then
+    (
+        cd "$release_parent"
+        sha256sum "$(basename "$wsl_rootfs_archive_path")" > "$(basename "$wsl_rootfs_archive_path").sha256"
+    )
+fi
+
+if [ -f "$wsl_install_script_path" ]; then
+    (
+        cd "$release_parent"
+        sha256sum "$(basename "$wsl_install_script_path")" > "$(basename "$wsl_install_script_path").sha256"
+    )
+fi
 
 tar -C "$release_parent" -czf "$archive_path" "$release_name"
 (
@@ -238,3 +349,10 @@ tar -C "$release_parent" -czf "$archive_path" "$release_name"
 echo "Release directory ready: $release_dir"
 echo "Release archive ready: $archive_path"
 echo "Release checksum ready: $archive_path.sha256"
+if [ -f "$wsl_rootfs_archive_path" ]; then
+    echo "WSL rootfs archive ready: $wsl_rootfs_archive_path"
+    echo "WSL checksum ready: $wsl_rootfs_archive_path.sha256"
+fi
+if [ -f "$wsl_install_script_path" ]; then
+    echo "WSL install script ready: $wsl_install_script_path"
+fi
