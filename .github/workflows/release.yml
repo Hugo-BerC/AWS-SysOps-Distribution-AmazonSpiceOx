@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_version:
-        description: AmazonSpiceOx release version
+        description: AMZSpiceOx release version
         required: true
-        default: 0.1.0
+        default: 1.0.0
       release_profiles:
         description: Space-separated profile list
         required: true
@@ -58,18 +58,22 @@ jobs:
           RELEASE_VERSION: ${{ github.event.inputs.release_version || github.ref_name }}
           ASOX_PROFILES: ${{ github.event.inputs.release_profiles || 'base ops aws awscli ssm terraform kubectl docker ssm-powerconnect' }}
         run: |
+          RELEASE_VERSION="${RELEASE_VERSION#v}"
+          export RELEASE_VERSION
           make fetch
           make verify-packages
-          sudo -E env "PATH=$PATH" make rootfs
           make initramfs
+          sudo -E env "PATH=$PATH" make rootfs
           sudo -E env "PATH=$PATH" make image
           sudo -E env "PATH=$PATH" make release-package-only
 
       - name: Upload release package
         uses: actions/upload-artifact@v4
         with:
-          name: amazonspiceox-release
+          name: amzspiceox-release
           path: |
             out/release/*.tar.gz
             out/release/*.tar.gz.sha256
+            out/release/*-install-wsl.ps1
+            out/release/*-install-wsl.ps1.sha256
           if-no-files-found: error

@@ -1,6 +1,15 @@
 --- a/ssm_powerconnect.py
 +++ b/ssm_powerconnect.py
-@@ -19,19 +19,28 @@
+@@ -9,7 +9,7 @@
+ import shutil
+ import shlex
+ import boto3
+-from PIL import Image, ImageTk
++from PIL import Image, ImageTk, ImageOps
+ from tkinter import filedialog
+ import numpy as np
+ import pandas as pd
+@@ -19,19 +19,32 @@
  DEFAULT_REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "eu-west-1"
  AWS_TIMEOUT_SECONDS = int(os.environ.get("SSM_POWERCONNECT_AWS_TIMEOUT", "60"))
  
@@ -16,16 +25,20 @@
 +BG_COLOR = "#120d09"
 +PANEL_COLOR = "#1c130c"
 +PANEL_ALT_COLOR = "#2a1a0e"
++PANEL_DEEP_COLOR = "#130c07"
++BORDER_COLOR = "#735738"
 +TEXT_COLOR = "#f5dfb1"
 +MUTED_COLOR = "#d6aa72"
 +ACCENT_COLOR = "#f6c453"
 +LINK_COLOR = "#f28c28"
-+ENTRY_BG = "#fff4db"
-+ENTRY_FG = "#241407"
++ENTRY_BG = "#21150d"
++ENTRY_FG = "#f7e4bd"
 +TREE_BG = "#0f1115"
 +TREE_ALT_BG = "#151008"
 +TREE_FG = "#f8e6be"
 +TREE_SELECTED = "#7c3f16"
++OUTPUT_BG = "#0b0d10"
++OVERLAY_RGBA = (18, 13, 9, 136)
  FONT_NAME = "DejaVu Sans Mono"
  FONT = (FONT_NAME, 11)
  FONT_SMALL = (FONT_NAME, 10)
@@ -38,7 +51,7 @@
  
  
  def log_error(message):
-@@ -223,7 +232,29 @@
+@@ -223,7 +236,77 @@
      return env
  
  
@@ -65,11 +78,59 @@
 +    return pairs
 +
 +
++def selected_instance_labels():
++    labels = []
++    if "tree" not in globals():
++        return labels
++    for item in tree.selection():
++        values = tree.item(item).get("values", [])
++        if values:
++            labels.append(str(values[0] or values[1]))
++    return labels
++
++
++def update_instance_count(visible_count=None):
++    if "instance_count_var" not in globals():
++        return
++    total_count = len(instances) if "instances" in globals() else 0
++    if visible_count is None:
++        visible_count = total_count
++    if total_count and visible_count != total_count:
++        instance_count_var.set(f"{visible_count} visible / {total_count} total")
++    elif total_count == 1:
++        instance_count_var.set("1 instance")
++    else:
++        instance_count_var.set(f"{total_count} instances")
++
++
++def update_selected_instance_context(event=None):
++    labels = selected_instance_labels()
++    if not labels:
++        text = "No instance selected"
++    elif len(labels) == 1:
++        text = labels[0]
++    else:
++        text = f"{len(labels)} instances selected"
++
++    if "tunnel_target_var" in globals():
++        tunnel_target_var.set(text)
++    if "command_target_var" in globals():
++        command_target_var.set(text)
++
++
++def clear_command_output():
++    if "command_output" not in globals():
++        return
++    command_output.configure(state="normal")
++    command_output.delete("1.0", tk.END)
++    command_output.configure(state="disabled")
++
++
 +def open_terminal_command(command, title=None):
      if not os.environ.get("DISPLAY"):
          messagebox.showerror(
              "Wake Up!!!",
-@@ -237,7 +268,11 @@
+@@ -237,7 +320,11 @@
          messagebox.showerror("Wake Up!!!", "No graphical terminal found. Install xterm in the AmazonSpiceOx image.")
          return False
  
@@ -82,7 +143,7 @@
      return True
  
  
-@@ -251,10 +286,11 @@
+@@ -251,10 +338,11 @@
  
      available = max(width - 28, 760)
      columns = (
@@ -98,7 +159,7 @@
      )
  
      for column_name, ratio, min_width, anchor in columns:
-@@ -409,6 +445,7 @@
+@@ -409,6 +497,7 @@
                      'Name': name,
                      'InstanceID': instance['InstanceId'],
                      'PrivateIpAddress': instance.get('PrivateIpAddress', 'No IP'),
@@ -106,7 +167,7 @@
                      'InstanceState': instance['State']['Name']
                  })
  
-@@ -441,13 +478,24 @@
+@@ -441,13 +530,27 @@
  
  def filter_instances(event):
      search_text = instance_search_entry.get().lower()
@@ -121,25 +182,39 @@
      for row in tree.get_children():
          tree.delete(row)
  
-     for inst in filtered_instances:
+-    for inst in filtered_instances:
 -        tree.insert("", "end", values=(inst['Name'] or 'No Name', inst['InstanceID'], inst['PrivateIpAddress'], inst['InstanceState']))
++    for index, inst in enumerate(filtered_instances):
 +        tree.insert("", "end", values=(
 +            inst['Name'] or 'No Name',
 +            inst['InstanceID'],
 +            inst['PrivateIpAddress'],
 +            inst.get('PlatformDetails', 'Unknown'),
 +            inst['InstanceState']
-+        ))
++        ), tags=("even" if index % 2 == 0 else "odd",))
++
++    update_instance_count(len(filtered_instances))
++    update_selected_instance_context()
  
  
  def refresh_instances():
-@@ -491,38 +539,38 @@
+@@ -486,43 +589,46 @@
+     for row in tree.get_children():
+         tree.delete(row)
+ 
+-    for inst in instances:
++    for index, inst in enumerate(instances):
+         tree.insert("", "end", values=(
              inst.get('Name', 'No Name'),
              inst['InstanceID'],
              inst.get('PrivateIpAddress', 'No IP'),
 +            inst.get('PlatformDetails', 'Unknown'),
              inst.get('InstanceState')
-         ))
+-        ))
++        ), tags=("even" if index % 2 == 0 else "odd",))
++
++    update_instance_count(len(instances))
++    update_selected_instance_context()
  
  
  def connect_selected_instances():
@@ -181,7 +256,7 @@
  
      except Exception as e:
          log_error(f"Error al conectar a la instancia: {e}")
-@@ -535,11 +583,13 @@
+@@ -535,11 +641,13 @@
          selected_items = tree.selection()
          if selected_items:
              instance_id = tree.item(selected_items[0])['values'][1]
@@ -195,7 +270,7 @@
          profile = selected_profile.get()
  
          if not profile:
-@@ -552,9 +602,13 @@
+@@ -552,9 +660,13 @@
          if not localport or not remoteport:
              messagebox.showerror("Wake Up!!!", " Type LocalPort and RemotePort.")
              return
@@ -212,7 +287,7 @@
  
          aws_path = get_aws_cli_path() or "aws"
          command = (
-@@ -564,7 +618,7 @@
+@@ -564,7 +676,7 @@
              f"--parameters portNumber={shlex.quote(remoteport)},localPortNumber={shlex.quote(localport)}"
          )
  
@@ -221,7 +296,7 @@
  
      except Exception as e:
          log_error(f"Error al abrir tunel: {e}")
-@@ -582,25 +636,32 @@
+@@ -582,25 +694,32 @@
          if not command:
              raise ValueError("Debe ingresar un comando para ejecutar.")
  
@@ -258,7 +333,7 @@
                  Parameters={'commands': [command]}
              )
  
-@@ -621,7 +682,7 @@
+@@ -621,7 +740,7 @@
              standard_error = invocation_result.get('StandardErrorContent', '')
              print(standard_output)
  
@@ -267,7 +342,7 @@
              if standard_error:
                  instance_output += f"\nSTDERR:\n{standard_error}"
              output.append(f"{instance_output}\n{'='*120}\n")
-@@ -661,6 +722,31 @@
+@@ -661,6 +780,31 @@
  def create_tab_with_background(notebook, text, image_path):
      frame = tk.Frame(notebook, bg=BG_COLOR)
      notebook.add(frame, text=text)
@@ -275,20 +350,20 @@
 +    if image_path and os.path.isfile(image_path):
 +        background_label = tk.Label(frame, borderwidth=0, highlightthickness=0)
 +        background_label.place(x=0, y=0, relwidth=1, relheight=1)
-+        frame._skin_original = Image.open(image_path)
++        frame._skin_original = Image.open(image_path).convert("RGB")
 +        frame._skin_photo = None
 +
 +        def resize_skin(event):
 +            if event.width < 2 or event.height < 2:
 +                return
-+            image = frame._skin_original.copy()
 +            resample_filter = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
-+            image.thumbnail((event.width, event.height), resample_filter)
-+            canvas_image = Image.new("RGB", (event.width, event.height), BG_COLOR)
-+            x_offset = max((event.width - image.width) // 2, 0)
-+            y_offset = max((event.height - image.height) // 2, 0)
-+            canvas_image.paste(image, (x_offset, y_offset))
-+            overlay = Image.new("RGBA", canvas_image.size, (18, 13, 9, 168))
++            canvas_image = ImageOps.fit(
++                frame._skin_original,
++                (event.width, event.height),
++                method=resample_filter,
++                centering=(0.5, 0.5),
++            )
++            overlay = Image.new("RGBA", canvas_image.size, OVERLAY_RGBA)
 +            canvas_image = Image.alpha_composite(canvas_image.convert("RGBA"), overlay)
 +            frame._skin_photo = ImageTk.PhotoImage(canvas_image)
 +            background_label.configure(image=frame._skin_photo)
@@ -299,23 +374,28 @@
      return frame
  
  
-@@ -889,7 +975,7 @@
+@@ -889,11 +1033,11 @@
  
  def main():
      global profile_search_entry, profile_menu, instance_search_entry, tree, profiles, instances, selected_profile
 -    global profile_account_ids
-+    global profile_account_ids, command_os_var
++    global profile_account_ids, command_os_var, instance_count_var, tunnel_target_var, command_target_var
      global localport_entry, remoteport_entry, command_input, command_output, analysis_output
  
      root = tk.Tk()
-@@ -901,21 +987,22 @@
+-    root.title(f"{APP_NAME} for AmazonSpiceOx")
++    root.title(f"{APP_NAME} for AMZSpiceOx")
+     root.geometry("1280x760")
+     root.minsize(900, 560)
+     root.configure(bg=BG_COLOR)
+@@ -901,25 +1045,31 @@
  
      style = ttk.Style()
      style.theme_use("clam")
 -    style.configure("Treeview", font=FONT, background=PANEL_COLOR, fieldbackground=PANEL_COLOR, foreground=LINK_COLOR, rowheight=28, borderwidth=0)
 -    style.configure("Treeview.Heading", font=FONT_TITLE, background=PANEL_ALT_COLOR, foreground=TEXT_COLOR, relief="flat")
 -    style.map("Treeview", background=[("selected", "#1d4ed8")], foreground=[("selected", "#ffffff")])
-+    style.configure("Treeview", font=FONT, background=TREE_BG, fieldbackground=TREE_BG, foreground=TREE_FG, rowheight=28, borderwidth=0)
++    style.configure("Treeview", font=FONT, background=TREE_BG, fieldbackground=TREE_BG, foreground=TREE_FG, rowheight=30, borderwidth=0)
 +    style.configure("Treeview.Heading", font=FONT_TITLE, background=PANEL_ALT_COLOR, foreground=ACCENT_COLOR, relief="flat")
 +    style.map("Treeview", background=[("selected", TREE_SELECTED)], foreground=[("selected", "#fff7d6")])
      style.configure("TLabel", font=FONT, background=BG_COLOR, foreground=TEXT_COLOR)
@@ -323,21 +403,99 @@
 -    style.map("TButton", background=[("active", "#1f2937")], foreground=[("active", "#ffffff")])
 +    style.map("TButton", background=[("active", "#3b2411")], foreground=[("active", "#ffffff")])
      style.configure("TCombobox", font=FONT, fieldbackground=ENTRY_BG, background=ENTRY_BG, foreground=ENTRY_FG, arrowsize=14)
-     style.configure("TNotebook", background=BG_COLOR, borderwidth=0, tabmargins=(8, 6, 8, 0))
-     style.configure("TNotebook.Tab", font=FONT, background=PANEL_COLOR, foreground=MUTED_COLOR, padding=(16, 8))
-     style.map("TNotebook.Tab", background=[("selected", PANEL_ALT_COLOR)], foreground=[("selected", ACCENT_COLOR)])
+-    style.configure("TNotebook", background=BG_COLOR, borderwidth=0, tabmargins=(8, 6, 8, 0))
+-    style.configure("TNotebook.Tab", font=FONT, background=PANEL_COLOR, foreground=MUTED_COLOR, padding=(16, 8))
+-    style.map("TNotebook.Tab", background=[("selected", PANEL_ALT_COLOR)], foreground=[("selected", ACCENT_COLOR)])
++    style.configure("TNotebook", background=BG_COLOR, borderwidth=0, tabmargins=(10, 8, 10, 0))
++    style.configure("TNotebook.Tab", font=FONT, background=PANEL_DEEP_COLOR, foreground=MUTED_COLOR, padding=(18, 9), borderwidth=0)
++    style.map("TNotebook.Tab", background=[("selected", PANEL_ALT_COLOR), ("active", PANEL_COLOR)], foreground=[("selected", ACCENT_COLOR), ("active", TEXT_COLOR)])
      style.configure("TFrame", background=BG_COLOR)
 -    style.configure("Action.TButton", font=FONT, background="#172554", foreground="#ffffff", padding=(12, 7))
 -    style.map("Action.TButton", background=[("active", "#1d4ed8")], foreground=[("active", "#ffffff")])
 +    style.configure("Action.TButton", font=FONT, background="#7c3f16", foreground="#fff7d6", padding=(12, 7))
 +    style.map("Action.TButton", background=[("active", "#b85f1d")], foreground=[("active", "#ffffff")])
++    style.configure("Secondary.TButton", font=FONT, background=PANEL_DEEP_COLOR, foreground=TEXT_COLOR, padding=(12, 7), borderwidth=0)
++    style.map("Secondary.TButton", background=[("active", "#3b2411")], foreground=[("active", "#ffffff")])
  
      selected_profile = tk.StringVar()
 +    command_os_var = tk.StringVar(value="Linux")
++    instance_count_var = tk.StringVar(value="No instances loaded")
++    tunnel_target_var = tk.StringVar(value="No instance selected")
++    command_target_var = tk.StringVar(value="No instance selected")
      profile_account_ids = load_profile_account_ids()
  
      notebook = ttk.Notebook(root, style="TNotebook")
-@@ -983,15 +1070,17 @@
+-    notebook.pack(expand=True, fill="both", padx=10, pady=10)
++    notebook.pack(expand=True, fill="both", padx=6, pady=6)
+ 
+     skin_path = get_skin_path()
+ 
+@@ -931,18 +1081,28 @@
+     powercon_frame.grid_columnconfigure(0, weight=1)
+     powercon_frame.grid_rowconfigure(1, weight=1)
+ 
+-    controls_frame = tk.Frame(powercon_frame, bg=PANEL_COLOR, padx=14, pady=12)
+-    controls_frame.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 10))
++    controls_frame = tk.Frame(
++        powercon_frame,
++        bg=PANEL_DEEP_COLOR,
++        padx=16,
++        pady=14,
++        highlightthickness=1,
++        highlightbackground=BORDER_COLOR,
++    )
++    controls_frame.grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 10))
+     controls_frame.grid_columnconfigure(2, weight=1)
+     controls_frame.grid_columnconfigure(5, weight=1)
+ 
+-    title_label = tk.Label(controls_frame, text=APP_NAME, font=FONT_TITLE, bg=PANEL_COLOR, fg=ACCENT_COLOR)
+-    title_label.grid(row=0, column=0, columnspan=2, padx=(0, 18), pady=(0, 10), sticky="w")
++    title_label = tk.Label(controls_frame, text=APP_NAME, font=FONT_TITLE, bg=PANEL_DEEP_COLOR, fg=ACCENT_COLOR)
++    title_label.grid(row=0, column=0, columnspan=2, padx=(0, 18), pady=(0, 12), sticky="w")
++
++    count_label = tk.Label(controls_frame, textvariable=instance_count_var, font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=TEXT_COLOR)
++    count_label.grid(row=0, column=2, pady=(0, 12), sticky="w")
+ 
+-    region_label = tk.Label(controls_frame, text=f"Region: {DEFAULT_REGION}", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
+-    region_label.grid(row=0, column=2, columnspan=4, pady=(0, 10), sticky="e")
++    region_label = tk.Label(controls_frame, text=f"Region: {DEFAULT_REGION}", font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=MUTED_COLOR)
++    region_label.grid(row=0, column=3, columnspan=3, pady=(0, 12), sticky="e")
+ 
+-    profile_menu_label = tk.Label(controls_frame, text="Profile", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
++    profile_menu_label = tk.Label(controls_frame, text="Profile", font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=MUTED_COLOR)
+     profile_menu_label.grid(row=1, column=0, padx=(0, 8), pady=4, sticky="w")
+ 
+     profile_search_entry = tk.Entry(controls_frame, font=FONT, width=26, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
+@@ -955,7 +1115,7 @@
+     refresh_button = ttk.Button(controls_frame, text="Refresh", command=refresh_instances, style="Action.TButton")
+     refresh_button.grid(row=1, column=3, padx=(0, 8), pady=4, sticky="ew")
+ 
+-    sync_button = ttk.Button(controls_frame, text="Sync IDs", command=sync_account_ids_async, style="TButton")
++    sync_button = ttk.Button(controls_frame, text="Sync IDs", command=sync_account_ids_async, style="Secondary.TButton")
+     sync_button.grid(row=1, column=4, padx=(0, 0), pady=4, sticky="ew")
+ 
+     profiles = get_profiles()
+@@ -965,7 +1125,7 @@
+     else:
+         messagebox.showerror("Wake Up!!!", "No se encontraron perfiles de AWS configurados.")
+ 
+-    instance_search_label = tk.Label(controls_frame, text="Instance", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
++    instance_search_label = tk.Label(controls_frame, text="Instance", font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=MUTED_COLOR)
+     instance_search_label.grid(row=2, column=0, padx=(0, 8), pady=(8, 0), sticky="w")
+ 
+     instance_search_entry = tk.Entry(controls_frame, font=FONT, width=26, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
+@@ -975,64 +1135,136 @@
+     connect_button = ttk.Button(controls_frame, text="Connect", command=connect_selected_instances, style="Action.TButton")
+     connect_button.grid(row=2, column=2, padx=(0, 10), pady=(8, 0), sticky="w")
+ 
+-    banner_label = tk.Label(controls_frame, text="AWS SSM operations from arrakis", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR)
++    banner_label = tk.Label(controls_frame, text="AWS SSM operations from arrakis", font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=MUTED_COLOR)
+     banner_label.grid(row=2, column=3, columnspan=3, padx=(0, 0), pady=(8, 0), sticky="e")
+ 
+-    tree_frame = tk.Frame(powercon_frame, bg=PANEL_COLOR, padx=1, pady=1)
+-    tree_frame.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
++    tree_frame = tk.Frame(powercon_frame, bg=BORDER_COLOR, padx=1, pady=1)
++    tree_frame.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
      tree_frame.grid_columnconfigure(0, weight=1)
      tree_frame.grid_rowconfigure(0, weight=1)
  
@@ -360,41 +518,140 @@
      tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
      tree.configure(yscrollcommand=tree_scroll.set)
      tree.grid(row=0, column=0, sticky="nsew")
-@@ -999,25 +1088,28 @@
+     tree_scroll.grid(row=0, column=1, sticky="ns")
      tree.bind("<Configure>", resize_instance_tree)
++    tree.bind("<<TreeviewSelect>>", update_selected_instance_context)
++    tree.tag_configure("even", background=TREE_BG, foreground=TREE_FG)
++    tree.tag_configure("odd", background=TREE_ALT_BG, foreground=TREE_FG)
      root.after(100, resize_instance_tree)
  
 -    tunnel_panel = tk.Frame(powertunnel_frame, bg=PANEL_COLOR, padx=24, pady=24)
 -    tunnel_panel.pack(anchor="n", fill="x", expand=True, padx=18, pady=18)
 -    tunnel_panel.grid_columnconfigure(1, weight=1)
-+    tunnel_panel = tk.Frame(powertunnel_frame, bg=PANEL_COLOR, padx=28, pady=28)
-+    tunnel_panel.place(relx=0.5, rely=0.16, anchor="n", width=520)
-+    tunnel_panel.grid_columnconfigure(1, weight=0)
-     tk.Label(tunnel_panel, text="Port forwarding", font=FONT_TITLE, bg=PANEL_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, columnspan=3, pady=(0, 14), sticky="w")
-     tk.Label(tunnel_panel, text="Local port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=1, column=0, padx=(0, 12), pady=6, sticky="w")
+-    tk.Label(tunnel_panel, text="Port forwarding", font=FONT_TITLE, bg=PANEL_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, columnspan=3, pady=(0, 14), sticky="w")
+-    tk.Label(tunnel_panel, text="Local port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=1, column=0, padx=(0, 12), pady=6, sticky="w")
 -    localport_entry = tk.Entry(tunnel_panel, font=FONT, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
 -    localport_entry.grid(row=1, column=1, padx=(0, 12), pady=6, sticky="ew")
-+    localport_entry = tk.Entry(tunnel_panel, font=FONT, width=PORT_WIDTH, justify="center", bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
-+    localport_entry.grid(row=1, column=1, padx=(0, 12), pady=6, sticky="w")
-     tk.Label(tunnel_panel, text="Remote port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=2, column=0, padx=(0, 12), pady=6, sticky="w")
+-    tk.Label(tunnel_panel, text="Remote port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=2, column=0, padx=(0, 12), pady=6, sticky="w")
 -    remoteport_entry = tk.Entry(tunnel_panel, font=FONT, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
 -    remoteport_entry.grid(row=2, column=1, padx=(0, 12), pady=6, sticky="ew")
+-    ttk.Button(tunnel_panel, text="Start tunnel", command=open_tunnel_with_terminal, style="Action.TButton").grid(row=1, column=2, rowspan=2, padx=(8, 0), pady=6, sticky="ns")
++    tunnel_panel = tk.Frame(
++        powertunnel_frame,
++        bg=PANEL_DEEP_COLOR,
++        padx=30,
++        pady=26,
++        highlightthickness=1,
++        highlightbackground=BORDER_COLOR,
++    )
++    tunnel_panel.place(relx=0.5, rely=0.10, anchor="n", width=500)
++    tunnel_panel.grid_columnconfigure(1, weight=0)
++    tk.Label(tunnel_panel, text="Port forwarding", font=FONT_TITLE, bg=PANEL_DEEP_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, columnspan=3, pady=(0, 6), sticky="w")
++    tk.Label(tunnel_panel, textvariable=tunnel_target_var, font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=TEXT_COLOR).grid(row=1, column=0, columnspan=3, pady=(0, 16), sticky="w")
++    tk.Label(tunnel_panel, text="Local port", font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=MUTED_COLOR).grid(row=2, column=0, padx=(0, 12), pady=6, sticky="w")
++    localport_entry = tk.Entry(tunnel_panel, font=FONT, width=PORT_WIDTH, justify="center", bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
++    localport_entry.grid(row=2, column=1, padx=(0, 12), pady=6, sticky="w")
++    tk.Label(tunnel_panel, text="Remote port", font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=MUTED_COLOR).grid(row=3, column=0, padx=(0, 12), pady=6, sticky="w")
 +    remoteport_entry = tk.Entry(tunnel_panel, font=FONT, width=PORT_WIDTH, justify="center", bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
-+    remoteport_entry.grid(row=2, column=1, padx=(0, 12), pady=6, sticky="w")
-     ttk.Button(tunnel_panel, text="Start tunnel", command=open_tunnel_with_terminal, style="Action.TButton").grid(row=1, column=2, rowspan=2, padx=(8, 0), pady=6, sticky="ns")
++    remoteport_entry.grid(row=3, column=1, padx=(0, 12), pady=6, sticky="w")
++    ttk.Button(tunnel_panel, text="Start tunnel", command=open_tunnel_with_terminal, style="Action.TButton").grid(row=2, column=2, rowspan=2, padx=(8, 0), pady=6, sticky="ns")
  
      powercommand_frame.grid_columnconfigure(0, weight=1)
++    powercommand_frame.grid_columnconfigure(1, weight=12)
++    powercommand_frame.grid_columnconfigure(2, weight=1)
      powercommand_frame.grid_rowconfigure(2, weight=1)
-     command_panel = tk.Frame(powercommand_frame, bg=BG_COLOR)
-     command_panel.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
+-    command_panel = tk.Frame(powercommand_frame, bg=BG_COLOR)
+-    command_panel.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
 -    command_panel.grid_columnconfigure(0, weight=1)
-+    command_panel.grid_columnconfigure(1, weight=1)
-     tk.Label(command_panel, text="Command", font=FONT_TITLE, bg=BG_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
+-    tk.Label(command_panel, text="Command", font=FONT_TITLE, bg=BG_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
 -    ttk.Button(command_panel, text="Send command", command=invocation, style="Action.TButton").grid(row=0, column=1, sticky="e")
-+    tk.Label(command_panel, text="Target OS", font=FONT_SMALL, bg=BG_COLOR, fg=MUTED_COLOR).grid(row=0, column=1, padx=(24, 8), sticky="e")
+-    command_input = tk.Text(powercommand_frame, height=6, font=FONT, bg=PANEL_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR, relief="flat", padx=10, pady=8)
+-    command_input.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
+-    command_output = tk.Text(powercommand_frame, font=FONT, bg=PANEL_COLOR, fg=LINK_COLOR, state="disabled", relief="flat", padx=10, pady=8)
+-    command_output.grid(row=2, column=0, sticky="nsew", padx=14, pady=(0, 14))
++    command_panel = tk.Frame(
++        powercommand_frame,
++        bg=PANEL_DEEP_COLOR,
++        padx=14,
++        pady=10,
++        highlightthickness=1,
++        highlightbackground=BORDER_COLOR,
++    )
++    command_panel.grid(row=0, column=1, sticky="ew", padx=16, pady=(16, 10))
++    command_panel.grid_columnconfigure(1, weight=1)
++    tk.Label(command_panel, text="Command", font=FONT_TITLE, bg=PANEL_DEEP_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
++    tk.Label(command_panel, textvariable=command_target_var, font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=TEXT_COLOR).grid(row=0, column=1, padx=(18, 18), sticky="w")
++    tk.Label(command_panel, text="Target OS", font=FONT_SMALL, bg=PANEL_DEEP_COLOR, fg=MUTED_COLOR).grid(row=0, column=2, padx=(8, 8), sticky="e")
 +    command_os_menu = ttk.Combobox(command_panel, textvariable=command_os_var, font=FONT, state="readonly", values=("Linux", "Windows"), width=10)
-+    command_os_menu.grid(row=0, column=2, padx=(0, 10), sticky="e")
-+    ttk.Button(command_panel, text="Send command", command=invocation, style="Action.TButton").grid(row=0, column=3, sticky="e")
-     command_input = tk.Text(powercommand_frame, height=6, font=FONT, bg=PANEL_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR, relief="flat", padx=10, pady=8)
-     command_input.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
-     command_output = tk.Text(powercommand_frame, font=FONT, bg=PANEL_COLOR, fg=LINK_COLOR, state="disabled", relief="flat", padx=10, pady=8)
++    command_os_menu.grid(row=0, column=3, padx=(0, 10), sticky="e")
++    ttk.Button(command_panel, text="Send command", command=invocation, style="Action.TButton").grid(row=0, column=4, padx=(0, 8), sticky="e")
++    ttk.Button(command_panel, text="Clear output", command=clear_command_output, style="Secondary.TButton").grid(row=0, column=5, sticky="e")
++    command_input = tk.Text(
++        powercommand_frame,
++        height=7,
++        font=FONT,
++        bg=OUTPUT_BG,
++        fg=TEXT_COLOR,
++        insertbackground=ACCENT_COLOR,
++        relief="flat",
++        padx=12,
++        pady=10,
++        highlightthickness=1,
++        highlightbackground=BORDER_COLOR,
++    )
++    command_input.grid(row=1, column=1, sticky="ew", padx=16, pady=(0, 10))
++    command_output = tk.Text(
++        powercommand_frame,
++        font=FONT,
++        bg=OUTPUT_BG,
++        fg=LINK_COLOR,
++        state="disabled",
++        relief="flat",
++        padx=12,
++        pady=10,
++        highlightthickness=1,
++        highlightbackground=BORDER_COLOR,
++    )
++    command_output.grid(row=2, column=1, sticky="nsew", padx=16, pady=(0, 16))
+ 
+     powerebs_frame.grid_columnconfigure(0, weight=1)
++    powerebs_frame.grid_columnconfigure(1, weight=12)
++    powerebs_frame.grid_columnconfigure(2, weight=1)
+     powerebs_frame.grid_rowconfigure(1, weight=1)
+-    ebs_toolbar = tk.Frame(powerebs_frame, bg=BG_COLOR)
+-    ebs_toolbar.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 10))
++    ebs_toolbar = tk.Frame(
++        powerebs_frame,
++        bg=PANEL_DEEP_COLOR,
++        padx=14,
++        pady=10,
++        highlightthickness=1,
++        highlightbackground=BORDER_COLOR,
++    )
++    ebs_toolbar.grid(row=0, column=1, sticky="ew", padx=16, pady=(16, 10))
+     ebs_toolbar.grid_columnconfigure(0, weight=1)
+-    tk.Label(ebs_toolbar, text="EBS data analysis", font=FONT_TITLE, bg=BG_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
++    tk.Label(ebs_toolbar, text="EBS data analysis", font=FONT_TITLE, bg=PANEL_DEEP_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
+     ttk.Button(ebs_toolbar, text="Create dashboard", command=ebs_analysis, style="Action.TButton").grid(row=0, column=1, padx=(0, 8), sticky="e")
+-    ttk.Button(ebs_toolbar, text="Select CSV", command=seleccionar_archivo, style="TButton").grid(row=0, column=2, sticky="e")
+-    analysis_output = tk.Text(powerebs_frame, font=FONT, bg=PANEL_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR, relief="flat", padx=10, pady=8)
+-    analysis_output.grid(row=1, column=0, sticky="nsew", padx=14, pady=(0, 14))
++    ttk.Button(ebs_toolbar, text="Select CSV", command=seleccionar_archivo, style="Secondary.TButton").grid(row=0, column=2, sticky="e")
++    analysis_output = tk.Text(
++        powerebs_frame,
++        font=FONT,
++        bg=OUTPUT_BG,
++        fg=TEXT_COLOR,
++        insertbackground=ACCENT_COLOR,
++        relief="flat",
++        padx=12,
++        pady=10,
++        highlightthickness=1,
++        highlightbackground=BORDER_COLOR,
++    )
++    analysis_output.grid(row=1, column=1, sticky="nsew", padx=16, pady=(0, 16))
++    analysis_output.insert(tk.END, "Select an EC2 instance and create an EBS dashboard, or load a CSV to calculate a baseline.\n")
++    analysis_output.configure(state="disabled")
+ 
+     root.mainloop()
+ 
