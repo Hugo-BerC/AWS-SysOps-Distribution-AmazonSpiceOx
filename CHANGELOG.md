@@ -8,6 +8,10 @@ Implemented:
 
 - AMZSpiceOx 1.0.0 release naming for QEMU and WSL artifacts
 - Arrakis-themed SSM-PowerConnect skin and palette
+- SSM-PowerConnect fullscreen cover background, darker editor-style inputs,
+  alternate table rows, and cleaner tab/panel styling
+- SSM-PowerConnect instance count, selected-instance context, and command
+  output clearing controls
 - PowerCon OS column sourced from EC2 `PlatformDetails`
 - PowerCommand Linux/Windows document selector for `AWS-RunShellScript` and
   `AWS-RunPowerShellScript`

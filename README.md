@@ -178,8 +178,8 @@ From WSL or Linux:
 make profile-info
 make fetch
 make verify-packages
-sudo -E make rootfs
 make initramfs
+sudo -E make rootfs
 sudo -E make image
 make run
 make run-gui
@@ -188,6 +188,8 @@ make xpra-attach
 
 Avoid `sudo -E make all` for regular local work. It can leave source trees in
 `build/src/` owned by root, which then breaks later non-root rebuilds.
+Build `initramfs` before the sudo-only rootfs/image steps when you are running
+the commands separately.
 
 Expected boot marker:
 
@@ -285,8 +287,8 @@ Build and package it locally:
 ```bash
 ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make fetch
 ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make verify-packages
-sudo -E ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make rootfs
 ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make initramfs
+sudo -E ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make rootfs
 sudo -E ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make image
 sudo -E ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect" make release-package-only
 ```
@@ -425,16 +427,16 @@ make run ASOX_PROFILES="base ops docker"
 
 ```bash
 make fetch ASOX_PROFILES="base gui"
-sudo -E make rootfs ASOX_PROFILES="base gui"
 make initramfs
+sudo -E make rootfs ASOX_PROFILES="base gui"
 sudo -E make image ASOX_PROFILES="base gui"
 make run-gui-only ASOX_PROFILES="base gui"
 ```
 
 ```bash
 make fetch ASOX_PROFILES="base gui xpra"
-sudo -E make rootfs ASOX_PROFILES="base gui xpra"
 make initramfs
+sudo -E make rootfs ASOX_PROFILES="base gui xpra"
 sudo -E make image ASOX_PROFILES="base gui xpra"
 make run-only ASOX_PROFILES="base gui xpra"
 ```
@@ -442,8 +444,8 @@ make run-only ASOX_PROFILES="base gui xpra"
 ```bash
 make fetch ASOX_PROFILES="base ssm-powerconnect"
 make verify-packages
-sudo -E make rootfs ASOX_PROFILES="base ssm-powerconnect"
 make initramfs
+sudo -E make rootfs ASOX_PROFILES="base ssm-powerconnect"
 sudo -E make image ASOX_PROFILES="base ssm-powerconnect"
 make smoke-ssm-powerconnect-only ASOX_PROFILES="base ssm-powerconnect"
 make run-gui-only ASOX_PROFILES="base ssm-powerconnect"
@@ -646,8 +648,8 @@ TCP and then boot the guest normally:
 ```bash
 make fetch ASOX_PROFILES="base gui"
 make verify-packages
-sudo -E make rootfs ASOX_PROFILES="base gui"
 make initramfs
+sudo -E make rootfs ASOX_PROFILES="base gui"
 sudo -E make image ASOX_PROFILES="base gui"
 make run-only ASOX_PROFILES="base gui"
 ```
@@ -848,8 +850,8 @@ Build and boot:
 ```bash
 make fetch ASOX_PROFILES="base gui xpra"
 make verify-packages
-sudo -E make rootfs ASOX_PROFILES="base gui xpra"
 make initramfs
+sudo -E make rootfs ASOX_PROFILES="base gui xpra"
 sudo -E make image ASOX_PROFILES="base gui xpra"
 make run-only ASOX_PROFILES="base gui xpra"
 ```
@@ -895,8 +897,8 @@ Build and validate:
 ```bash
 make fetch ASOX_PROFILES="base ssm-powerconnect"
 make verify-packages
-sudo -E make rootfs ASOX_PROFILES="base ssm-powerconnect"
 make initramfs
+sudo -E make rootfs ASOX_PROFILES="base ssm-powerconnect"
 sudo -E make image ASOX_PROFILES="base ssm-powerconnect"
 make smoke-ssm-powerconnect-only ASOX_PROFILES="base ssm-powerconnect"
 ```
