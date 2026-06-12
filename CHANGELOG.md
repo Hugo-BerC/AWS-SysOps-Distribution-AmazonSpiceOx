@@ -2,6 +2,20 @@
 
 All notable progress in AmazonSpiceOx is tracked here.
 
+## 2026-06-12 - AMZSpiceOx 1.0.0 Product Release
+
+Implemented:
+
+- AMZSpiceOx 1.0.0 release naming for QEMU and WSL artifacts
+- Arrakis-themed SSM-PowerConnect skin and palette
+- PowerCon OS column sourced from EC2 `PlatformDetails`
+- PowerCommand Linux/Windows document selector for `AWS-RunShellScript` and
+  `AWS-RunPowerShellScript`
+- SSM terminal titles based on the selected EC2 instance name
+- compact, centered PowerTunnel port inputs for 0-65535 values
+- WSL hostname configuration so imported sessions keep `arrakis`
+- WSL installer defaults now import the distro as `AMZSpiceOx`
+
 ## 2026-06-09 - v1.1 Usability and Integration Fixes
 
 Implemented:
@@ -70,7 +84,7 @@ Implemented:
 - release kernel command line defaults remove `earlyprintk` and add
   `quiet loglevel=3 tsc=unstable`
 - release artifact naming now uses a clean flavor slug such as
-  `amazonspiceox-0.1.0-amd64-full.tar.gz`, with full profile details kept in
+  `amzspiceox-1.0.0-amd64-full.tar.gz`, with full profile details kept in
   `BUILDINFO`
 - QEMU now passes the host UTC epoch into the guest and uses an UTC host-backed
   RTC by default, reducing apt/AWS failures caused by clock skew

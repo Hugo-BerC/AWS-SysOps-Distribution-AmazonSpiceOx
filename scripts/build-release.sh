@@ -16,7 +16,7 @@ qemu_memory="${12:?QEMU memory required}"
 qemu_keyboard_layout="${13:-${QEMU_KEYBOARD_LAYOUT:-es}}"
 release_flavor="${14:-$profile_id}"
 
-release_name="amazonspiceox-${version}-${debian_arch}-${release_flavor}"
+release_name="amzspiceox-${version}-${debian_arch}-${release_flavor}"
 release_parent="$out_dir/release"
 release_dir="$release_parent/$release_name"
 archive_path="$release_parent/$release_name.tar.gz"
@@ -129,8 +129,8 @@ create_wsl_rootfs_archive
 
 cat > "$wsl_install_script_path" <<EOF
 param(
-    [string]\$Name = "AmazonSpiceOx",
-    [string]\$InstallDir = "\$env:LOCALAPPDATA\\AmazonSpiceOx\\wsl",
+    [string]\$Name = "AMZSpiceOx",
+    [string]\$InstallDir = "\$env:LOCALAPPDATA\\AMZSpiceOx\\wsl",
     [string]\$Rootfs = "\$PSScriptRoot\\$release_name-wsl-rootfs.tar.gz"
 )
 
@@ -212,7 +212,7 @@ qemu_append=$qemu_append
 EOF
 
 cat > "$release_dir/README.md" <<EOF
-# AmazonSpiceOx $version
+# AMZSpiceOx $version
 
 Profile:
 
@@ -313,7 +313,7 @@ Import it from PowerShell:
 
 \`\`\`powershell
 .\\$release_name-install-wsl.ps1
-wsl -d AmazonSpiceOx
+wsl -d AMZSpiceOx
 \`\`\`
 
 WSL uses the host WSL kernel instead of the bundled QEMU kernel/initramfs.

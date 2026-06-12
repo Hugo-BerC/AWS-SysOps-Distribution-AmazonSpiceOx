@@ -1,6 +1,6 @@
 # Release Packaging
 
-AmazonSpiceOx release packaging produces a self-contained QEMU test bundle:
+AMZSpiceOx release packaging produces a self-contained QEMU test bundle:
 
 - `bzImage`
 - `rootfs.cpio.gz`
@@ -41,7 +41,7 @@ The default release flavor is `full`, so the first complete image is packaged
 as:
 
 ```text
-amazonspiceox-<version>-amd64-full.tar.gz
+amzspiceox-<version>-amd64-full.tar.gz
 ```
 
 Detailed profile metadata remains in `BUILDINFO`.
@@ -49,8 +49,8 @@ Detailed profile metadata remains in `BUILDINFO`.
 Release packaging also emits WSL import assets next to the QEMU bundle:
 
 ```text
-amazonspiceox-<version>-amd64-full-wsl-rootfs.tar.gz
-amazonspiceox-<version>-amd64-full-install-wsl.ps1
+amzspiceox-<version>-amd64-full-wsl-rootfs.tar.gz
+amzspiceox-<version>-amd64-full-install-wsl.ps1
 ```
 
 ## Smoke Tests
@@ -71,8 +71,8 @@ ASOX_PROFILES="base ops aws awscli ssm terraform kubectl docker ssm-powerconnect
 ## Run A Release
 
 ```bash
-tar -xf amazonspiceox-0.1.0-amd64-*.tar.gz
-cd amazonspiceox-0.1.0-amd64-*
+tar -xf amzspiceox-1.0.0-amd64-*.tar.gz
+cd amzspiceox-1.0.0-amd64-*
 sh run-gui.sh
 ```
 
@@ -94,15 +94,15 @@ QEMU_KEYBOARD_LAYOUT=us sh run-gui.sh
 From PowerShell:
 
 ```powershell
-.\amazonspiceox-0.1.0-amd64-full-install-wsl.ps1
-wsl -d AmazonSpiceOx
+.\amzspiceox-1.0.0-amd64-full-install-wsl.ps1
+wsl -d AMZSpiceOx
 ```
 
 Manual import:
 
 ```powershell
-wsl --import AmazonSpiceOx "$env:LOCALAPPDATA\AmazonSpiceOx\wsl" .\amazonspiceox-0.1.0-amd64-full-wsl-rootfs.tar.gz --version 2
-wsl -d AmazonSpiceOx
+wsl --import AMZSpiceOx "$env:LOCALAPPDATA\AMZSpiceOx\wsl" .\amzspiceox-1.0.0-amd64-full-wsl-rootfs.tar.gz --version 2
+wsl -d AMZSpiceOx
 ```
 
 WSL mode uses the host WSL kernel. The bundled `bzImage`, initramfs, and QEMU

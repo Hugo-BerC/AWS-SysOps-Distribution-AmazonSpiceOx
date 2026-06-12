@@ -1,0 +1,400 @@
+--- a/ssm_powerconnect.py
++++ b/ssm_powerconnect.py
+@@ -19,19 +19,28 @@
+ DEFAULT_REGION = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "eu-west-1"
+ AWS_TIMEOUT_SECONDS = int(os.environ.get("SSM_POWERCONNECT_AWS_TIMEOUT", "60"))
+ 
+-BG_COLOR = "#0d1117"
+-PANEL_COLOR = "#111827"
+-PANEL_ALT_COLOR = "#151f2e"
+-TEXT_COLOR = "#e5e7eb"
+-MUTED_COLOR = "#9ca3af"
+-ACCENT_COLOR = "#facc15"
+-LINK_COLOR = "#38bdf8"
+-ENTRY_BG = "#f8fafc"
+-ENTRY_FG = "#0f172a"
++BG_COLOR = "#120d09"
++PANEL_COLOR = "#1c130c"
++PANEL_ALT_COLOR = "#2a1a0e"
++TEXT_COLOR = "#f5dfb1"
++MUTED_COLOR = "#d6aa72"
++ACCENT_COLOR = "#f6c453"
++LINK_COLOR = "#f28c28"
++ENTRY_BG = "#fff4db"
++ENTRY_FG = "#241407"
++TREE_BG = "#0f1115"
++TREE_ALT_BG = "#151008"
++TREE_FG = "#f8e6be"
++TREE_SELECTED = "#7c3f16"
+ FONT_NAME = "DejaVu Sans Mono"
+ FONT = (FONT_NAME, 11)
+ FONT_SMALL = (FONT_NAME, 10)
+ FONT_TITLE = (FONT_NAME, 13, "bold")
++PORT_WIDTH = 8
++COMMAND_DOCUMENTS = {
++    "Linux": "AWS-RunShellScript",
++    "Windows": "AWS-RunPowerShellScript",
++}
+ 
+ 
+ def log_error(message):
+@@ -223,7 +232,29 @@
+     return env
+ 
+ 
+-def open_terminal_command(command):
++def sanitize_terminal_title(title):
++    cleaned = "".join(ch if ch.isalnum() or ch in ("-", "_", ".", " ") else "-" for ch in str(title or "PowerConnect"))
++    cleaned = " ".join(cleaned.split())
++    return cleaned[:48] or "PowerConnect"
++
++
++def get_instance_label(instance_id):
++    for inst in instances:
++        if inst.get("InstanceID") == instance_id:
++            return inst.get("Name") or instance_id
++    return instance_id
++
++
++def selected_instance_pairs():
++    pairs = []
++    for item in tree.selection():
++        values = tree.item(item).get("values", [])
++        if len(values) >= 2:
++            pairs.append((str(values[1]), str(values[0] or values[1])))
++    return pairs
++
++
++def open_terminal_command(command, title=None):
+     if not os.environ.get("DISPLAY"):
+         messagebox.showerror(
+             "Wake Up!!!",
+@@ -237,7 +268,11 @@
+         messagebox.showerror("Wake Up!!!", "No graphical terminal found. Install xterm in the AmazonSpiceOx image.")
+         return False
+ 
+-    subprocess.Popen(build_terminal_command(terminal_path, command), env=terminal_environment(), start_new_session=True)
++    env = terminal_environment()
++    if title:
++        env["ASOX_TERMINAL_WINDOW_NAME"] = sanitize_terminal_title(title)
++
++    subprocess.Popen(build_terminal_command(terminal_path, command), env=env, start_new_session=True)
+     return True
+ 
+ 
+@@ -251,10 +286,11 @@
+ 
+     available = max(width - 28, 760)
+     columns = (
+-        ("Name", 0.44, 240, "w"),
+-        ("InstanceID", 0.25, 180, "w"),
+-        ("PrivateIP", 0.17, 130, "w"),
+-        ("InstanceState", 0.14, 110, "center"),
++        ("Name", 0.34, 220, "w"),
++        ("InstanceID", 0.22, 170, "w"),
++        ("PrivateIP", 0.15, 120, "w"),
++        ("PlatformDetails", 0.17, 150, "w"),
++        ("InstanceState", 0.12, 100, "center"),
+     )
+ 
+     for column_name, ratio, min_width, anchor in columns:
+@@ -409,6 +445,7 @@
+                     'Name': name,
+                     'InstanceID': instance['InstanceId'],
+                     'PrivateIpAddress': instance.get('PrivateIpAddress', 'No IP'),
++                    'PlatformDetails': instance.get('PlatformDetails', 'Unknown'),
+                     'InstanceState': instance['State']['Name']
+                 })
+ 
+@@ -441,13 +478,24 @@
+ 
+ def filter_instances(event):
+     search_text = instance_search_entry.get().lower()
+-    filtered_instances = [inst for inst in instances if search_text in str(inst['Name']).lower() or search_text in str(inst['InstanceID'])]
++    filtered_instances = [
++        inst for inst in instances
++        if search_text in str(inst['Name']).lower()
++        or search_text in str(inst['InstanceID']).lower()
++        or search_text in str(inst.get('PlatformDetails', '')).lower()
++    ]
+ 
+     for row in tree.get_children():
+         tree.delete(row)
+ 
+     for inst in filtered_instances:
+-        tree.insert("", "end", values=(inst['Name'] or 'No Name', inst['InstanceID'], inst['PrivateIpAddress'], inst['InstanceState']))
++        tree.insert("", "end", values=(
++            inst['Name'] or 'No Name',
++            inst['InstanceID'],
++            inst['PrivateIpAddress'],
++            inst.get('PlatformDetails', 'Unknown'),
++            inst['InstanceState']
++        ))
+ 
+ 
+ def refresh_instances():
+@@ -491,38 +539,38 @@
+             inst.get('Name', 'No Name'),
+             inst['InstanceID'],
+             inst.get('PrivateIpAddress', 'No IP'),
++            inst.get('PlatformDetails', 'Unknown'),
+             inst.get('InstanceState')
+         ))
+ 
+ 
+ def connect_selected_instances():
+     profile = selected_profile.get()
+-    selected_items = tree.selection()
+-    instance_ids = [tree.item(item)['values'][1] for item in selected_items]
+-    if not instance_ids:
++    instance_pairs = selected_instance_pairs()
++    if not instance_pairs:
+         typed_id = instance_search_entry.get().strip()
+         if typed_id.startswith("i-"):
+-            instance_ids = [typed_id]
++            instance_pairs = [(typed_id, get_instance_label(typed_id))]
+         else:
+             messagebox.showerror("Wake Up!!!", "Select an instance or type a valid Instance ID (i-...).")
+             return
+-    threading.Thread(target=connect_to_instance, args=(profile, instance_ids), daemon=True).start()
++    threading.Thread(target=connect_to_instance, args=(profile, instance_pairs), daemon=True).start()
+ 
+ 
+-def connect_to_instance(profile, instance_ids):
++def connect_to_instance(profile, instance_pairs):
+     """Inicia una sesion SSM en la instancia seleccionada."""
+     try:
+-        if not instance_ids:
++        if not instance_pairs:
+             messagebox.showerror("Wake Up!!!", "No instances selected.")
+             return
+ 
+-        for instance_id in instance_ids:
++        for instance_id, instance_name in instance_pairs:
+             aws_path = get_aws_cli_path() or "aws"
+             command = (
+                 f"{shlex.quote(aws_path)} ssm start-session "
+                 f"--target {shlex.quote(instance_id)} --profile {shlex.quote(profile)}"
+             )
+-            open_terminal_command(command)
++            open_terminal_command(command, title=instance_name)
+ 
+     except Exception as e:
+         log_error(f"Error al conectar a la instancia: {e}")
+@@ -535,11 +583,13 @@
+         selected_items = tree.selection()
+         if selected_items:
+             instance_id = tree.item(selected_items[0])['values'][1]
++            instance_name = tree.item(selected_items[0])['values'][0]
+         else:
+             instance_id = instance_search_entry.get().strip()
+             if not instance_id.startswith("i-"):
+                 messagebox.showerror("Wake Up!!!", "Select an instance or type a valid Instance ID (i-...).")
+                 return
++            instance_name = get_instance_label(instance_id)
+         profile = selected_profile.get()
+ 
+         if not profile:
+@@ -552,9 +602,13 @@
+         if not localport or not remoteport:
+             messagebox.showerror("Wake Up!!!", " Type LocalPort and RemotePort.")
+             return
+-        if not localport.isdigit() or not remoteport.isdigit():
+-            messagebox.showerror("Wake Up!!!", "LocalPort and RemotePort must be numeric.")
+-            return
++        for label, port in (("LocalPort", localport), ("RemotePort", remoteport)):
++            if not port.isdigit():
++                messagebox.showerror("Wake Up!!!", f"{label} must be numeric.")
++                return
++            if not 0 <= int(port) <= 65535:
++                messagebox.showerror("Wake Up!!!", f"{label} must be between 0 and 65535.")
++                return
+ 
+         aws_path = get_aws_cli_path() or "aws"
+         command = (
+@@ -564,7 +618,7 @@
+             f"--parameters portNumber={shlex.quote(remoteport)},localPortNumber={shlex.quote(localport)}"
+         )
+ 
+-        open_terminal_command(command)
++        open_terminal_command(command, title=f"{instance_name}-tunnel")
+ 
+     except Exception as e:
+         log_error(f"Error al abrir tunel: {e}")
+@@ -582,25 +636,32 @@
+         if not command:
+             raise ValueError("Debe ingresar un comando para ejecutar.")
+ 
+-        threading.Thread(target=sendcommand, args=(instance_ids, command, selected_profile.get()), daemon=True).start()
++        os_family = command_os_var.get() or "Linux"
++        document_name = COMMAND_DOCUMENTS.get(os_family, COMMAND_DOCUMENTS["Linux"])
++
++        threading.Thread(
++            target=sendcommand,
++            args=(instance_ids, command, selected_profile.get(), document_name, os_family),
++            daemon=True
++        ).start()
+         print(instance_ids)
+     except Exception as e:
+         messagebox.showerror("Wake Up!!!", str(e))
+ 
+ 
+-def sendcommand(instance_ids, command, profile):
++def sendcommand(instance_ids, command, profile, document_name, os_family):
+     print(instance_ids)
+     output = []
+     for instance in instance_ids:
+         try:
+-            print(f"Sending command on instance: {instance}")
++            print(f"Sending {os_family} command on instance: {instance}")
+             session = boto3.Session(profile_name=profile)
+ 
+             ssm_client = session.client('ssm')
+ 
+             response = ssm_client.send_command(
+                 InstanceIds=[instance],
+-                DocumentName="AWS-RunShellScript",
++                DocumentName=document_name,
+                 Parameters={'commands': [command]}
+             )
+ 
+@@ -621,7 +682,7 @@
+             standard_error = invocation_result.get('StandardErrorContent', '')
+             print(standard_output)
+ 
+-            instance_output = f"Instance {instance}:\n{standard_output}"
++            instance_output = f"Instance {instance} ({os_family}, {document_name}):\n{standard_output}"
+             if standard_error:
+                 instance_output += f"\nSTDERR:\n{standard_error}"
+             output.append(f"{instance_output}\n{'='*120}\n")
+@@ -661,6 +722,31 @@
+ def create_tab_with_background(notebook, text, image_path):
+     frame = tk.Frame(notebook, bg=BG_COLOR)
+     notebook.add(frame, text=text)
++
++    if image_path and os.path.isfile(image_path):
++        background_label = tk.Label(frame, borderwidth=0, highlightthickness=0)
++        background_label.place(x=0, y=0, relwidth=1, relheight=1)
++        frame._skin_original = Image.open(image_path)
++        frame._skin_photo = None
++
++        def resize_skin(event):
++            if event.width < 2 or event.height < 2:
++                return
++            image = frame._skin_original.copy()
++            resample_filter = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
++            image.thumbnail((event.width, event.height), resample_filter)
++            canvas_image = Image.new("RGB", (event.width, event.height), BG_COLOR)
++            x_offset = max((event.width - image.width) // 2, 0)
++            y_offset = max((event.height - image.height) // 2, 0)
++            canvas_image.paste(image, (x_offset, y_offset))
++            overlay = Image.new("RGBA", canvas_image.size, (18, 13, 9, 168))
++            canvas_image = Image.alpha_composite(canvas_image.convert("RGBA"), overlay)
++            frame._skin_photo = ImageTk.PhotoImage(canvas_image)
++            background_label.configure(image=frame._skin_photo)
++            background_label.lower()
++
++        frame.bind("<Configure>", resize_skin)
++
+     return frame
+ 
+ 
+@@ -889,7 +975,7 @@
+ 
+ def main():
+     global profile_search_entry, profile_menu, instance_search_entry, tree, profiles, instances, selected_profile
+-    global profile_account_ids
++    global profile_account_ids, command_os_var
+     global localport_entry, remoteport_entry, command_input, command_output, analysis_output
+ 
+     root = tk.Tk()
+@@ -901,21 +987,22 @@
+ 
+     style = ttk.Style()
+     style.theme_use("clam")
+-    style.configure("Treeview", font=FONT, background=PANEL_COLOR, fieldbackground=PANEL_COLOR, foreground=LINK_COLOR, rowheight=28, borderwidth=0)
+-    style.configure("Treeview.Heading", font=FONT_TITLE, background=PANEL_ALT_COLOR, foreground=TEXT_COLOR, relief="flat")
+-    style.map("Treeview", background=[("selected", "#1d4ed8")], foreground=[("selected", "#ffffff")])
++    style.configure("Treeview", font=FONT, background=TREE_BG, fieldbackground=TREE_BG, foreground=TREE_FG, rowheight=28, borderwidth=0)
++    style.configure("Treeview.Heading", font=FONT_TITLE, background=PANEL_ALT_COLOR, foreground=ACCENT_COLOR, relief="flat")
++    style.map("Treeview", background=[("selected", TREE_SELECTED)], foreground=[("selected", "#fff7d6")])
+     style.configure("TLabel", font=FONT, background=BG_COLOR, foreground=TEXT_COLOR)
+     style.configure("TButton", font=FONT, background=PANEL_ALT_COLOR, foreground=TEXT_COLOR, padding=(10, 6), borderwidth=0)
+-    style.map("TButton", background=[("active", "#1f2937")], foreground=[("active", "#ffffff")])
++    style.map("TButton", background=[("active", "#3b2411")], foreground=[("active", "#ffffff")])
+     style.configure("TCombobox", font=FONT, fieldbackground=ENTRY_BG, background=ENTRY_BG, foreground=ENTRY_FG, arrowsize=14)
+     style.configure("TNotebook", background=BG_COLOR, borderwidth=0, tabmargins=(8, 6, 8, 0))
+     style.configure("TNotebook.Tab", font=FONT, background=PANEL_COLOR, foreground=MUTED_COLOR, padding=(16, 8))
+     style.map("TNotebook.Tab", background=[("selected", PANEL_ALT_COLOR)], foreground=[("selected", ACCENT_COLOR)])
+     style.configure("TFrame", background=BG_COLOR)
+-    style.configure("Action.TButton", font=FONT, background="#172554", foreground="#ffffff", padding=(12, 7))
+-    style.map("Action.TButton", background=[("active", "#1d4ed8")], foreground=[("active", "#ffffff")])
++    style.configure("Action.TButton", font=FONT, background="#7c3f16", foreground="#fff7d6", padding=(12, 7))
++    style.map("Action.TButton", background=[("active", "#b85f1d")], foreground=[("active", "#ffffff")])
+ 
+     selected_profile = tk.StringVar()
++    command_os_var = tk.StringVar(value="Linux")
+     profile_account_ids = load_profile_account_ids()
+ 
+     notebook = ttk.Notebook(root, style="TNotebook")
+@@ -983,15 +1070,17 @@
+     tree_frame.grid_columnconfigure(0, weight=1)
+     tree_frame.grid_rowconfigure(0, weight=1)
+ 
+-    tree = ttk.Treeview(tree_frame, columns=("Name", "InstanceID", "PrivateIP", "InstanceState"), show="headings", style="Treeview")
++    tree = ttk.Treeview(tree_frame, columns=("Name", "InstanceID", "PrivateIP", "PlatformDetails", "InstanceState"), show="headings", style="Treeview")
+     tree.heading("Name", text="Name")
+     tree.heading("InstanceID", text="Instance ID")
+     tree.heading("PrivateIP", text="Private IP")
++    tree.heading("PlatformDetails", text="OS")
+     tree.heading("InstanceState", text="State")
+-    tree.column("Name", width=430, minwidth=220, anchor="w")
+-    tree.column("InstanceID", width=210, minwidth=170, anchor="w")
+-    tree.column("PrivateIP", width=150, minwidth=120, anchor="w")
+-    tree.column("InstanceState", width=140, minwidth=110, anchor="center")
++    tree.column("Name", width=360, minwidth=220, anchor="w")
++    tree.column("InstanceID", width=200, minwidth=170, anchor="w")
++    tree.column("PrivateIP", width=140, minwidth=120, anchor="w")
++    tree.column("PlatformDetails", width=170, minwidth=150, anchor="w")
++    tree.column("InstanceState", width=120, minwidth=100, anchor="center")
+     tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+     tree.configure(yscrollcommand=tree_scroll.set)
+     tree.grid(row=0, column=0, sticky="nsew")
+@@ -999,25 +1088,28 @@
+     tree.bind("<Configure>", resize_instance_tree)
+     root.after(100, resize_instance_tree)
+ 
+-    tunnel_panel = tk.Frame(powertunnel_frame, bg=PANEL_COLOR, padx=24, pady=24)
+-    tunnel_panel.pack(anchor="n", fill="x", expand=True, padx=18, pady=18)
+-    tunnel_panel.grid_columnconfigure(1, weight=1)
++    tunnel_panel = tk.Frame(powertunnel_frame, bg=PANEL_COLOR, padx=28, pady=28)
++    tunnel_panel.place(relx=0.5, rely=0.16, anchor="n", width=520)
++    tunnel_panel.grid_columnconfigure(1, weight=0)
+     tk.Label(tunnel_panel, text="Port forwarding", font=FONT_TITLE, bg=PANEL_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, columnspan=3, pady=(0, 14), sticky="w")
+     tk.Label(tunnel_panel, text="Local port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=1, column=0, padx=(0, 12), pady=6, sticky="w")
+-    localport_entry = tk.Entry(tunnel_panel, font=FONT, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
+-    localport_entry.grid(row=1, column=1, padx=(0, 12), pady=6, sticky="ew")
++    localport_entry = tk.Entry(tunnel_panel, font=FONT, width=PORT_WIDTH, justify="center", bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
++    localport_entry.grid(row=1, column=1, padx=(0, 12), pady=6, sticky="w")
+     tk.Label(tunnel_panel, text="Remote port", font=FONT_SMALL, bg=PANEL_COLOR, fg=MUTED_COLOR).grid(row=2, column=0, padx=(0, 12), pady=6, sticky="w")
+-    remoteport_entry = tk.Entry(tunnel_panel, font=FONT, bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
+-    remoteport_entry.grid(row=2, column=1, padx=(0, 12), pady=6, sticky="ew")
++    remoteport_entry = tk.Entry(tunnel_panel, font=FONT, width=PORT_WIDTH, justify="center", bg=ENTRY_BG, fg=ENTRY_FG, insertbackground=ENTRY_FG, relief="flat")
++    remoteport_entry.grid(row=2, column=1, padx=(0, 12), pady=6, sticky="w")
+     ttk.Button(tunnel_panel, text="Start tunnel", command=open_tunnel_with_terminal, style="Action.TButton").grid(row=1, column=2, rowspan=2, padx=(8, 0), pady=6, sticky="ns")
+ 
+     powercommand_frame.grid_columnconfigure(0, weight=1)
+     powercommand_frame.grid_rowconfigure(2, weight=1)
+     command_panel = tk.Frame(powercommand_frame, bg=BG_COLOR)
+     command_panel.grid(row=0, column=0, sticky="ew", padx=14, pady=(14, 8))
+-    command_panel.grid_columnconfigure(0, weight=1)
++    command_panel.grid_columnconfigure(1, weight=1)
+     tk.Label(command_panel, text="Command", font=FONT_TITLE, bg=BG_COLOR, fg=ACCENT_COLOR).grid(row=0, column=0, sticky="w")
+-    ttk.Button(command_panel, text="Send command", command=invocation, style="Action.TButton").grid(row=0, column=1, sticky="e")
++    tk.Label(command_panel, text="Target OS", font=FONT_SMALL, bg=BG_COLOR, fg=MUTED_COLOR).grid(row=0, column=1, padx=(24, 8), sticky="e")
++    command_os_menu = ttk.Combobox(command_panel, textvariable=command_os_var, font=FONT, state="readonly", values=("Linux", "Windows"), width=10)
++    command_os_menu.grid(row=0, column=2, padx=(0, 10), sticky="e")
++    ttk.Button(command_panel, text="Send command", command=invocation, style="Action.TButton").grid(row=0, column=3, sticky="e")
+     command_input = tk.Text(powercommand_frame, height=6, font=FONT, bg=PANEL_COLOR, fg=TEXT_COLOR, insertbackground=TEXT_COLOR, relief="flat", padx=10, pady=8)
+     command_input.grid(row=1, column=0, sticky="ew", padx=14, pady=(0, 10))
+     command_output = tk.Text(powercommand_frame, font=FONT, bg=PANEL_COLOR, fg=LINK_COLOR, state="disabled", relief="flat", padx=10, pady=8)

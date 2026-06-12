@@ -15,6 +15,8 @@ aws_profiles_patch_file="${SSM_POWERCONNECT_AWS_PROFILES_PATCH_FILE:-configs/ssm
 aws_cli_refresh_patch_file="${SSM_POWERCONNECT_AWS_CLI_REFRESH_PATCH_FILE:-configs/ssm-powerconnect/aws-cli-refresh.patch}"
 terminal_tabs_patch_file="${SSM_POWERCONNECT_TERMINAL_TABS_PATCH_FILE:-configs/ssm-powerconnect/terminal-tabs.patch}"
 responsive_layout_patch_file="${SSM_POWERCONNECT_RESPONSIVE_LAYOUT_PATCH_FILE:-configs/ssm-powerconnect/responsive-layout.patch}"
+arrakis_app_patch_file="${SSM_POWERCONNECT_ARRAKIS_APP_PATCH_FILE:-configs/ssm-powerconnect/arrakis-app.patch}"
+skin_file="${SSM_POWERCONNECT_SKIN_FILE:-configs/ssm-powerconnect/AMZSpiceOx.png}"
 
 case "$ui_patch_file" in
     /*)
@@ -58,6 +60,24 @@ case "$responsive_layout_patch_file" in
         ;;
     *)
         responsive_layout_patch_path="$(pwd)/$responsive_layout_patch_file"
+        ;;
+esac
+
+case "$arrakis_app_patch_file" in
+    /*)
+        arrakis_app_patch_path="$arrakis_app_patch_file"
+        ;;
+    *)
+        arrakis_app_patch_path="$(pwd)/$arrakis_app_patch_file"
+        ;;
+esac
+
+case "$skin_file" in
+    /*)
+        skin_path="$skin_file"
+        ;;
+    *)
+        skin_path="$(pwd)/$skin_file"
         ;;
 esac
 
@@ -145,6 +165,11 @@ done
 
 chmod 0755 "$app_dir/run.sh" 2>/dev/null || true
 
+if [ -f "$skin_path" ]; then
+    echo "Installing AmazonSpiceOx Arrakis skin"
+    cp "$skin_path" "$app_dir/skin.jpg"
+fi
+
 if [ -f "$ui_patch_path" ]; then
     if ! command -v patch >/dev/null 2>&1; then
         echo "error: patch is required to apply $ui_patch_path" >&2
@@ -207,6 +232,19 @@ if [ -f "$responsive_layout_patch_path" ]; then
     (
         cd "$app_dir"
         patch -p1 < "$responsive_layout_patch_path"
+    )
+fi
+
+if [ -f "$arrakis_app_patch_path" ]; then
+    if ! command -v patch >/dev/null 2>&1; then
+        echo "error: patch is required to apply $arrakis_app_patch_path" >&2
+        exit 1
+    fi
+
+    echo "Applying AmazonSpiceOx SSM-PowerConnect Arrakis app patch"
+    (
+        cd "$app_dir"
+        patch -p1 < "$arrakis_app_patch_path"
     )
 fi
 
