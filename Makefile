@@ -1,4 +1,4 @@
-PROJECT := amazonspiceox
+PROJECT := amzspiceox
 empty :=
 space := $(empty) $(empty)
 
@@ -22,7 +22,7 @@ KUBECTL_VERSION ?= v1.36.1
 XPRA_PORT ?= 14500
 SSM_POWERCONNECT_REPO ?= https://github.com/Hugo-BerC/SSM-PowerConnect
 SSM_POWERCONNECT_REF ?= main
-RELEASE_VERSION ?= 0.1.0
+RELEASE_VERSION ?= 1.0.0
 RELEASE_FLAVOR ?= full
 ASOX_RELEASE_PROFILES ?= base ops aws awscli ssm terraform kubectl docker ssm-powerconnect
 
@@ -209,7 +209,7 @@ APT_SMOKE_TIMEOUT ?= 180s
 
 .PHONY: help
 help:
-	@echo "AmazonSpiceOx"
+	@echo "AMZSpiceOx"
 	@echo ""
 	@echo "Targets:"
 	@echo "  make deps       Check host tools"
@@ -504,7 +504,7 @@ $(XPRA_KEY_VERIFY_STAMP): scripts/fetch-xpra-key.sh | $(DL_DIR)
 	sh scripts/fetch-xpra-key.sh "$(abspath $(XPRA_KEY_FILE))" "$(XPRA_KEY_FINGERPRINT)"
 	touch "$@"
 
-$(SSM_POWERCONNECT_FETCH_STAMP): scripts/fetch-ssm-powerconnect.sh configs/ssm-powerconnect/ui-polish.patch configs/ssm-powerconnect/aws-config-profiles.patch configs/ssm-powerconnect/aws-cli-refresh.patch configs/ssm-powerconnect/terminal-tabs.patch configs/ssm-powerconnect/responsive-layout.patch | $(DL_DIR)
+$(SSM_POWERCONNECT_FETCH_STAMP): scripts/fetch-ssm-powerconnect.sh configs/ssm-powerconnect/ui-polish.patch configs/ssm-powerconnect/aws-config-profiles.patch configs/ssm-powerconnect/aws-cli-refresh.patch configs/ssm-powerconnect/terminal-tabs.patch configs/ssm-powerconnect/responsive-layout.patch configs/ssm-powerconnect/arrakis-app.patch configs/ssm-powerconnect/AMZSpiceOx.png | $(DL_DIR)
 	sh scripts/fetch-ssm-powerconnect.sh "$(SSM_POWERCONNECT_REPO)" "$(SSM_POWERCONNECT_REF)" "$(abspath $(SSM_POWERCONNECT_DIR))"
 	touch "$@"
 

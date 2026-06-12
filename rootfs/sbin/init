@@ -601,10 +601,10 @@ finish_requested_smoke() {
 }
 
 start_shell() {
-    log "AmazonSpiceOx Phase III boot complete"
+    log "AMZSpiceOx boot complete"
     log "active profile: $ACTIVE_PROFILE"
     echo
-    echo "AmazonSpiceOx - Phase III"
+    echo "AMZSpiceOx 1.0.0"
     echo "AMAZONSPICEOX_PHASE3_BOOT_OK"
     echo "Profile: $ACTIVE_PROFILE"
     echo "Root filesystem: persistent ext4"

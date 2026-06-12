@@ -1,6 +1,10 @@
-# AmazonSpiceOx
+# AMZSpiceOx
 
-AmazonSpiceOx is an educational Linux distribution project focused on boot flow,
+<p align="center">
+  <img src="configs/ssm-powerconnect/AMZSpiceOx.png" alt="AMZSpiceOx cover" width="100%">
+</p>
+
+AMZSpiceOx is an educational Linux distribution project focused on boot flow,
 root filesystem assembly, and cloud-oriented systems engineering.
 
 The project started as a Linux-from-scratch style exercise. The current
@@ -188,7 +192,7 @@ Avoid `sudo -E make all` for regular local work. It can leave source trees in
 Expected boot marker:
 
 ```text
-AmazonSpiceOx - Phase III
+AMZSpiceOx 1.0.0
 AMAZONSPICEOX_PHASE3_BOOT_OK
 arrakis:/#
 ```
@@ -296,7 +300,7 @@ out/release/
 Release artifacts use a short flavor name by default, for example:
 
 ```text
-amazonspiceox-0.1.0-amd64-full.tar.gz
+amzspiceox-1.0.0-amd64-full.tar.gz
 ```
 
 The full resolved profile is recorded inside `BUILDINFO`.
@@ -307,8 +311,8 @@ such as `/root/.aws/config`, `/root/.aws/credentials`, or `/root/.aws/sso`.
 To run an unpacked release:
 
 ```bash
-tar -xf amazonspiceox-0.1.0-amd64-*.tar.gz
-cd amazonspiceox-0.1.0-amd64-*
+tar -xf amzspiceox-1.0.0-amd64-*.tar.gz
+cd amzspiceox-1.0.0-amd64-*
 sh run-gui.sh
 ```
 
@@ -323,22 +327,22 @@ ASOX_GUI_BACKEND=local-x11 ssm-powerconnect
 Release packaging also emits a sibling WSL rootfs archive and installer:
 
 ```text
-amazonspiceox-0.1.0-amd64-full-wsl-rootfs.tar.gz
-amazonspiceox-0.1.0-amd64-full-install-wsl.ps1
+amzspiceox-1.0.0-amd64-full-wsl-rootfs.tar.gz
+amzspiceox-1.0.0-amd64-full-install-wsl.ps1
 ```
 
 Import it from PowerShell:
 
 ```powershell
-.\amazonspiceox-0.1.0-amd64-full-install-wsl.ps1
-wsl -d AmazonSpiceOx
+.\amzspiceox-1.0.0-amd64-full-install-wsl.ps1
+wsl -d AMZSpiceOx
 ```
 
 Or manually:
 
 ```powershell
-wsl --import AmazonSpiceOx "$env:LOCALAPPDATA\AmazonSpiceOx\wsl" .\amazonspiceox-0.1.0-amd64-full-wsl-rootfs.tar.gz --version 2
-wsl -d AmazonSpiceOx
+wsl --import AMZSpiceOx "$env:LOCALAPPDATA\AMZSpiceOx\wsl" .\amzspiceox-1.0.0-amd64-full-wsl-rootfs.tar.gz --version 2
+wsl -d AMZSpiceOx
 ```
 
 In WSL mode, AmazonSpiceOx uses the host WSL kernel instead of the bundled QEMU
@@ -1035,7 +1039,7 @@ PowerShell:
 
 ```powershell
 wsl --shutdown
-wsl -d AmazonSpiceOx
+wsl -d AMZSpiceOx
 ```
 
 If Bash prints locale warnings such as:
